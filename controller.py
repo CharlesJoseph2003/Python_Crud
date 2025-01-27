@@ -7,6 +7,7 @@ class Controller:
         data = SynthConfig(preset_name, cutoff_freq, resonance, amplitude, resistance) #need to make a synthconfig object that is then appended
         #to the data storage
         self.data_storage.append(data)
+        return data
 
     def read_preset(self, preset_name):      
         for data in self.data_storage:
@@ -38,6 +39,18 @@ class Controller:
                 self.data_storage.remove(data)
                 return data
         return None
+
+    def get_data_storage(self):
+        return self.data_storage
     
 
 
+if __name__ == "__main__":
+    controller = Controller()
+    preset = controller.create_preset("preset 1", 10, 20, 30, 40)
+    preset2 = controller.create_preset("preset 2", 50,60,70,80)
+    controller.update_preset("preset 2", cutoff_freq=20)
+    controller.delete_preset("preset 2")
+    print(controller.get_data_storage())
+    # controller.delete_preset("preset 2")
+    print(controller.read_preset("preset 2"))
