@@ -1,0 +1,23 @@
+[
+    {
+        "preset_name": "Default Bass",
+        "cutoff_freq": 100,
+        "resonance": 1.0,
+        "amplitude": 0.8,
+        "resistance": 50
+    },
+    {
+        "preset_name": "Default Lead",
+        "cutoff_freq": 200,
+        "resonance": 0.5,
+        "amplitude": 0.9,
+        "resistance": 40
+    },
+    {
+        "preset_name": "Default Pad",
+        "cutoff_freq": 150,
+        "resonance": 0.7,
+        "amplitude": 0.6,
+        "resistance": 60
+    }
+]
