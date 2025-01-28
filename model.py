@@ -18,7 +18,7 @@ class SynthConfig:
     def to_dict(self):
         return {
         "preset_name": self.preset_name,  
-        "cutoff_frequency": self.cutoff_freq,
+        "cutoff_freq": self.cutoff_freq,
         "resonance": self.resonance,
         "amplitude": self.amplitude,
         "resistance": self.resistance,
