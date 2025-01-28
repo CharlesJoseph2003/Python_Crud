@@ -1,142 +1,285 @@
 import socket
 import json
+import tkinter as tk
+from tkinter import ttk, messagebox
+from tkinter.font import Font
 
-HOST = '127.0.0.1'  # Server IP
-PORT = 65432        # Server Port
+HOST = "127.0.0.1"
+PORT = 65432
 
-def send_request(request):
-    """Send a JSON request to the server and receive a response."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-        client_socket.connect((HOST, PORT))
-        client_socket.sendall(json.dumps(request).encode('utf-8'))
-        response = client_socket.recv(1024)
-        return json.loads(response.decode('utf-8'))
+class SynthesizerGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Synthesizer")
+        self.root.geometry("600x700")
+        self.root.configure(bg='#f0f0f0')
+        
+        # Configure style
+        self.style = ttk.Style()
+        self.style.theme_use('default')
+        self.style.configure('TNotebook', background='#f0f0f0')
+        self.style.configure('TFrame', background='#f0f0f0')
+        self.style.configure('TButton', padding=6)
+        self.style.configure('Custom.TButton', padding=10)
+        
+        # Create notebook for tabs
+        self.notebook = ttk.Notebook(root)
+        self.notebook.pack(expand=True, fill='both')
+        
+        # Create tabs
+        self.synth_config_tab = ttk.Frame(self.notebook)
+        self.current_config_tab = ttk.Frame(self.notebook)
+        self.saved_presets_tab = ttk.Frame(self.notebook)
+        
+        self.notebook.add(self.synth_config_tab, text='Current Synth Configuration')
+        self.notebook.add(self.current_config_tab, text='Create Preset')
+        self.notebook.add(self.saved_presets_tab, text='Saved Presets')
+        
+        self.setup_synth_config_tab()
+        self.setup_current_config_tab()
+        self.setup_saved_presets_tab()
 
-while True:
-    print("\nSynth Preset Manager")
-    print("1. Create new preset")
-    print("2. List all presets")
-    print("3. Update preset")
-    print("4. Delete preset")
-    print("5. Exit")
-    choice = int(input("Enter choice (1-5): "))
+    def setup_current_config_tab(self):
+        # Main container with padding
+        main_frame = ttk.Frame(self.current_config_tab)
+        main_frame.pack(expand=True, fill='both', padx=40, pady=20)
 
-    if choice == 1:
-        # Create new preset
-        preset_name = input("Name this preset: ")
-        cutoff_freq = input("Enter a cutoff frequency: ")
-        resonance = input("Enter a resonance: ")
-        amplitude = input("Enter an amplitude: ")
-        resistance = input("Enter a resistance: ")
+        # Title
+        title_font = Font(family="Arial", size=24, weight="bold")
+        title = tk.Label(main_frame, text="Synthesizer Parameters", 
+                        font=title_font, bg='#f0f0f0')
+        title.pack(pady=(0, 30))
+
+        # Parameters frame
+        params_frame = ttk.Frame(main_frame)
+        params_frame.pack(fill='x', padx=20)
+
+        # Create parameter entries with labels
+        param_font = Font(family="Arial", size=12)
+        params = [
+            ("Preset Name:", "preset_name"),
+            ("Filter Cutoff:", "cutoff_freq"),
+            ("Resonance:", "resonance"),
+            ("Amplitude:", "amplitude"),
+            ("Resistance:", "resistance")
+        ]
+
+        # Configure grid column weights
+        params_frame.grid_columnconfigure(1, weight=1)
+        
+        self.param_entries = {}
+        for i, (label_text, param_name) in enumerate(params):
+            # Label (right-aligned)
+            label = tk.Label(params_frame, text=label_text, font=param_font,
+                           bg='#f0f0f0', anchor='e')
+            label.grid(row=i, column=0, padx=(0, 20), pady=10, sticky='e')
+            
+            # Entry (left-aligned, expands to fill space)
+            entry = ttk.Entry(params_frame, font=param_font)
+            entry.grid(row=i, column=1, sticky='ew', pady=10)
+            
+            if param_name == "preset_name":
+                self.preset_name_entry = entry
+            else:
+                self.param_entries[param_name] = entry
+
+        # Save button container for center alignment
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill='x', pady=30)
+        
+        # Save button
+        save_btn = ttk.Button(button_frame, text="Save Preset",
+                            command=self.save_preset, style='Custom.TButton')
+        save_btn.pack(pady=10)
+
+    def setup_saved_presets_tab(self):
+        # Main container
+        main_frame = ttk.Frame(self.saved_presets_tab)
+        main_frame.pack(expand=True, fill='both', padx=40, pady=20)
+
+        # Title
+        title_font = Font(family="Arial", size=24, weight="bold")
+        title = tk.Label(main_frame, text="Saved Presets", 
+                        font=title_font, bg='#f0f0f0')
+        title.pack(pady=(0, 30))
+
+        # Presets listbox with scrollbar
+        list_frame = ttk.Frame(main_frame)
+        list_frame.pack(fill='both', expand=True, padx=20)
+        
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side='right', fill='y')
+        
+        self.presets_listbox = tk.Listbox(list_frame, 
+                                         font=("Arial", 11),
+                                         selectmode='single',
+                                         activestyle='none',
+                                         height=10)
+        self.presets_listbox.pack(fill='both', expand=True)
+        
+        # Connect scrollbar
+        self.presets_listbox.config(yscrollcommand=scrollbar.set)
+        scrollbar.config(command=self.presets_listbox.yview)
+
+        # Buttons frame
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(pady=20)
+
+        # Buttons with consistent width
+        button_width = 15
+        ttk.Button(btn_frame, text="Load", command=self.load_preset,
+                  width=button_width).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="Delete", command=self.delete_preset,
+                  width=button_width).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="Refresh", command=self.refresh_presets,
+                  width=button_width).pack(side='left', padx=5)
+
+        # Initial load of presets
+        self.refresh_presets()
+
+    def setup_synth_config_tab(self):
+        # Main container
+        main_frame = ttk.Frame(self.synth_config_tab)
+        main_frame.pack(expand=True, fill='both', padx=40, pady=20)
+
+        # Title
+        title_font = Font(family="Arial", size=24, weight="bold")
+        title = tk.Label(main_frame, text="Synthesizer Parameters", 
+                        font=title_font, bg='#f0f0f0')
+        title.pack(pady=(0, 30))
+
+        # Parameters frame
+        params_frame = ttk.Frame(main_frame)
+        params_frame.pack(fill='x', padx=20)
+
+        # Create labels for displaying values
+        param_font = Font(family="Arial", size=14, slant="italic")
+        value_font = Font(family="Arial", size=14)
+        
+        params = [
+            ("Preset Name:", "preset_name", ""),
+            ("Filter Cutoff:", "cutoff_freq", "0.00"),
+            ("Resonance:", "resonance", "0.00"),
+            ("Amplitude:", "amplitude", "0.00"),
+            ("Resistance:", "resistance", "0.00")
+        ]
+
+        # Store labels for updating later
+        self.param_labels = {}
+        
+        # Configure grid weights
+        params_frame.grid_columnconfigure(1, weight=1)
+        
+        for i, (label_text, param_name, default_value) in enumerate(params):
+            # Parameter label (left side)
+            label = tk.Label(params_frame, text=label_text, 
+                           font=param_font, bg='#f0f0f0', 
+                           anchor='e', width=15)
+            label.grid(row=i, column=0, padx=(0, 20), pady=15, sticky='e')
+            
+            # Value label (right side)
+            value_label = tk.Label(params_frame, text=default_value,
+                                 font=value_font, bg='#f0f0f0',
+                                 anchor='w', width=10)
+            value_label.grid(row=i, column=1, pady=15, sticky='w')
+            
+            self.param_labels[param_name] = value_label
+
+    def update_synth_display(self, preset_data):
+        """Update the placeholder tab with the loaded preset values"""
+        # Update all parameters
+        mapping = {
+            'cutoff_freq': 'cutoff_freq',
+            'resonance': 'resonance',
+            'amplitude': 'amplitude',
+            'resistance': 'resistance',
+            'preset_name': 'preset_name'
+        }
+        
+        for preset_param, display_param in mapping.items():
+            if preset_param in preset_data and display_param in self.param_labels:
+                value = preset_data[preset_param]
+                if preset_param == 'preset_name':
+                    self.param_labels[display_param].config(text=str(value))
+                else:
+                    self.param_labels[display_param].config(text=f"{float(value):.2f}")
+
+    def send_request(self, request):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+                client_socket.connect((HOST, PORT))
+                client_socket.sendall(json.dumps(request).encode('utf-8'))
+                response = client_socket.recv(4096)
+                return json.loads(response.decode('utf-8'))
+        except Exception as e:
+            messagebox.showerror("Error", f"Connection error: {str(e)}")
+            return None
+
+    def save_preset(self):
+        name = self.preset_name_entry.get()
+        if not name:
+            messagebox.showwarning("Warning", "Please enter a preset name")
+            return
 
         request = {
             "operation": "create",
             "data": {
-                "preset_name": preset_name,
-                "cutoff_freq": cutoff_freq,
-                "resonance": resonance,
-                "amplitude": amplitude,
-                "resistance": resistance
+                "preset_name": name,
+                "cutoff_freq": self.param_entries["cutoff_freq"].get(),
+                "resonance": self.param_entries["resonance"].get(),
+                "amplitude": self.param_entries["amplitude"].get(),
+                "resistance": self.param_entries["resistance"].get()
             }
         }
-        response = send_request(request)
-        print(response.get("message"))
+        
+        response = self.send_request(request)
+        if response:
+            messagebox.showinfo("Success", response.get("message", "Preset saved"))
+            self.refresh_presets()
 
-    elif choice == 2:
-        # List all presets
+    def load_preset(self):
+        selection = self.presets_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("Warning", "Please select a preset to load")
+            return
+
+        preset_name = self.presets_listbox.get(selection[0])
         request = {"operation": "list"}
-        response = send_request(request)
-        presets = response.get("presets", [])
-        print("\nPresets:")
-        print(presets)
-
-    elif choice == 3:
-        # Update preset
-        preset_name = input("Enter preset name to update: ")
-        print("What would you like to update?")
-        print("1. Cutoff Frequency")
-        print("2. Resonance")
-        print("3. Amplitude")
-        print("4. Resistance")
-        sub_choice = int(input("Enter choice (1-4): "))
-
-        update_data = {}
-        if sub_choice == 1:
-            update_data["cutoff_freq"] = input("Enter new cutoff frequency: ")
-        elif sub_choice == 2:
-            update_data["resonance"] = input("Enter new resonance: ")
-        elif sub_choice == 3:
-            update_data["amplitude"] = input("Enter new amplitude: ")
-        elif sub_choice == 4:
-            update_data["resistance"] = input("Enter new resistance: ")
-
-        request = {
-            "operation": "update",
-            "preset_name": preset_name,
-            "data": update_data
-        }
-        response = send_request(request)
-        print(response.get("message"))
-
-    elif choice == 4:
-        # Delete preset
-        preset_name = input("Enter preset name to delete: ")
-        request = {
-            "operation": "delete",
-            "preset_name": preset_name
-        }
-        response = send_request(request)
-        print(response.get("message"))
-
-    elif choice == 5:
-        # Exit
-        request = {"operation": "exit"}
-        response = send_request(request)
-        print(response.get("message"))
-        break
-
-    else:
-        print("Invalid choice. Please try again.")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# import socket
-# import json
-# from controller import Controller
-# from jsonSerializer import JsonSerializer
-
-# # Client setup
-# HOST = '127.0.0.1'  # The server's hostname or IP address
-# PORT = 65432        # The port used by the server
-
-# with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-#     client_socket.connect((HOST, PORT))
-    
-#     while True:
-#         # User input to create a JSON object
-#         user_input = input("Enter a message (type 'exit' to quit): ")
-#         if user_input.lower() == 'exit':
-#             break
+        response = self.send_request(request)
         
-#         message = {"message": user_input}
-#         client_socket.sendall(json.dumps(message).encode('utf-8'))  # Send JSON message
+        if response and "presets" in response:
+            for preset in response["presets"]:
+                if preset["preset_name"] == preset_name:
+                    # Update the synth display
+                    self.update_synth_display(preset)
+                    # Switch to the first tab
+                    self.notebook.select(0)
+                    break
+
+    def delete_preset(self):
+        selection = self.presets_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("Warning", "Please select a preset to delete")
+            return
+
+        preset_name = self.presets_listbox.get(selection[0])
+        if messagebox.askyesno("Confirm Delete", f"Delete preset '{preset_name}'?"):
+            request = {"operation": "delete", "preset_name": preset_name}
+            response = self.send_request(request)
+            if response:
+                messagebox.showinfo("Success", response.get("message", "Preset deleted"))
+                self.refresh_presets()
+
+    def refresh_presets(self):
+        request = {"operation": "list"}
+        response = self.send_request(request)
         
-#         # Receive response from the server
-#         data = client_socket.recv(1024)
-#         response = json.loads(data.decode('utf-8'))
-#         print("Response from server:", response)
+        self.presets_listbox.delete(0, tk.END)
+        if response and "presets" in response:
+            for preset in response["presets"]:
+                self.presets_listbox.insert(tk.END, preset["preset_name"])
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = SynthesizerGUI(root)
+    root.mainloop()
