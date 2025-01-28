@@ -1,7 +1,0 @@
-Setting up:
-Clone the repo and run "pip install -r requirements.txt"
-
-Running:
-Open two terminals or split terminals
-Run "python server.py" in the first one  
-Run "python client.py" in the second one 
