@@ -19,5 +19,19 @@
         "resonance": 0.7,
         "amplitude": 0.6,
         "resistance": 60
+    },
+    {
+        "preset_name": "Preset_1",
+        "cutoff_freq": "20",
+        "resonance": "0.00",
+        "amplitude": "0.00",
+        "resistance": "0.00"
+    },
+    {
+        "preset_name": "Preset 2",
+        "cutoff_freq": "40",
+        "resonance": "49",
+        "amplitude": "50",
+        "resistance": "38"
     }
 ]
