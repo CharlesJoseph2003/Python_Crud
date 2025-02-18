@@ -1,5 +1,6 @@
 import json
 from model import SynthConfig
+
 class Controller:
     def __init__(self, file_path="presets.json"):
         self.data_storage = []  # Temporary storage for presets
@@ -19,19 +20,20 @@ class Controller:
         return None
 
     def update_preset(self, preset_name, cutoff_freq=None, resonance=None, amplitude=None, resistance=None):
+        """Update a preset with new parameter values."""
         for data in self.data_storage:
             if data.preset_name == preset_name:
-                if cutoff_freq:
-                    data.cutoff_freq = cutoff_freq
-                if resonance:
-                    data.resonance = resonance
-                if amplitude:
-                    data.amplitude = amplitude
-                if resistance:
-                    data.resistance = resistance
+                if cutoff_freq is not None:
+                    data.cutoff_freq = float(cutoff_freq)
+                if resonance is not None:
+                    data.resonance = float(resonance)
+                if amplitude is not None:
+                    data.amplitude = float(amplitude)
+                if resistance is not None:
+                    data.resistance = float(resistance)
                 self.save_to_file(self.file_path)  # Save after updating
-                return data
-        return None
+                return True
+        return False
 
     def delete_preset(self, preset_name):
         for data in self.data_storage:
@@ -67,6 +69,18 @@ class Controller:
         except json.JSONDecodeError:
             print(f"Error decoding JSON from '{file_path}'. Starting with empty storage.")
 
+    def get_preset(self, preset_name):
+        """Get a preset by name and return it as a dictionary."""
+        preset = self.read_preset(preset_name)
+        if preset:
+            return {
+                "preset_name": preset.preset_name,
+                "cutoff_freq": preset.cutoff_freq,
+                "resonance": preset.resonance,
+                "amplitude": preset.amplitude,
+                "resistance": preset.resistance
+            }
+        return None
 
 
 if __name__ == "__main__":

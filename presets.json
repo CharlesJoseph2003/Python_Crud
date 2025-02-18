@@ -15,23 +15,16 @@
     },
     {
         "preset_name": "Default Pad",
-        "cutoff_freq": 150,
-        "resonance": 0.7,
+        "cutoff_freq": "20",
+        "resonance": "6",
         "amplitude": 0.6,
         "resistance": 60
     },
     {
         "preset_name": "Preset_1",
-        "cutoff_freq": "20",
-        "resonance": "0.00",
-        "amplitude": "0.00",
-        "resistance": "0.00"
-    },
-    {
-        "preset_name": "Preset 2",
-        "cutoff_freq": "40",
-        "resonance": "49",
-        "amplitude": "50",
-        "resistance": "38"
+        "cutoff_freq": 140.0,
+        "resonance": "20",
+        "amplitude": "30",
+        "resistance": "40"
     }
 ]

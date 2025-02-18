@@ -1,18 +1,19 @@
-import socket
-import json
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkinter.font import Font
-
-HOST = "127.0.0.1"
-PORT = 65432
+from controller import Controller
+from jsonSerializer import JsonSerializer
 
 class SynthesizerGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Synthesizer")
-        self.root.geometry("600x500")
+        self.root.geometry("800x480")
         self.root.configure(bg='#f0f0f0')
+        
+        # Initialize controller
+        self.controller = Controller()
+        self.json_serializer = JsonSerializer()
         
         # Configure style
         self.style = ttk.Style()
@@ -207,76 +208,56 @@ class SynthesizerGUI:
                 else:
                     self.param_labels[display_param].config(text=f"{float(value):.2f}")
 
-    def send_request(self, request):
+    def send_create_request(self, preset_name, cutoff_freq, resonance, amplitude, resistance):
         try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-                client_socket.connect((HOST, PORT))
-                client_socket.sendall(json.dumps(request).encode('utf-8'))
-                response = client_socket.recv(4096)
-                return json.loads(response.decode('utf-8'))
+            self.controller.create_preset(preset_name, cutoff_freq, resonance, amplitude, resistance)
+            messagebox.showinfo("Success", "Preset created successfully!")
+            self.refresh_presets()
         except Exception as e:
-            return None
+            messagebox.showerror("Error", f"Failed to create preset: {str(e)}")
 
-    def save_preset(self):
-        name = self.preset_name_entry.get()
-        if not name:
-            return
+    def send_update_request(self, preset_name, cutoff_freq=None, resonance=None, amplitude=None, resistance=None):
+        try:
+            result = self.controller.update_preset(preset_name, cutoff_freq, resonance, amplitude, resistance)
+            if result:
+                messagebox.showinfo("Success", "Preset updated successfully!")
+                self.refresh_presets()
+            else:
+                messagebox.showerror("Error", "Preset not found!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to update preset: {str(e)}")
 
-        request = {
-            "operation": "create",
-            "data": {
-                "preset_name": name,
-                "cutoff_freq": self.param_entries["cutoff_freq"].get(),
-                "resonance": self.param_entries["resonance"].get(),
-                "amplitude": self.param_entries["amplitude"].get(),
-                "resistance": self.param_entries["resistance"].get()
-            }
-        }
-        
-        response = self.send_request(request)
-        if response:
-            self.refresh_presets()
-
-    def load_preset(self):
-        selection = self.presets_listbox.curselection()
-        if not selection:
-            return
-
-        preset_name = self.presets_listbox.get(selection[0])
-        request = {"operation": "list"}
-        response = self.send_request(request)
-        
-        if response and "presets" in response:
-            for preset in response["presets"]:
-                if preset["preset_name"] == preset_name:
-                    # Update the synth display
-                    self.update_synth_display(preset)
-                    # Switch to the first tab
-                    self.notebook.select(0)
-                    break
-
-    def delete_preset(self):
-        selection = self.presets_listbox.curselection()
-        if not selection:
-            return
-
-        preset_name = self.presets_listbox.get(selection[0])
-        request = {"operation": "delete", "preset_name": preset_name}
-        response = self.send_request(request)
-        if response:
-            self.refresh_presets()
+    def send_delete_request(self, preset_name):
+        try:
+            result = self.controller.delete_preset(preset_name)
+            if result:
+                messagebox.showinfo("Success", "Preset deleted successfully!")
+                self.refresh_presets()
+            else:
+                messagebox.showerror("Error", "Preset not found!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to delete preset: {str(e)}")
 
     def refresh_presets(self):
-        request = {"operation": "list"}
-        response = self.send_request(request)
-        
-        self.presets_listbox.delete(0, tk.END)
-        if response and "presets" in response:
-            for preset in response["presets"]:
+        """Refresh the presets list and update dropdown if it exists."""
+        try:
+            presets = self.json_serializer.serialize(self.controller)
+            
+            # Update listbox
+            self.presets_listbox.delete(0, tk.END)
+            for preset in presets:
                 self.presets_listbox.insert(tk.END, preset["preset_name"])
-            # Update the dropdown in update tab if it exists
+            
+            # Update dropdown only if it exists
             if hasattr(self, 'preset_dropdown'):
-                self.preset_dropdown['values'] = [preset["preset_name"] for preset in response["presets"]]
+                preset_names = [preset["preset_name"] for preset in presets]
+                self.preset_dropdown['values'] = preset_names
+                # If there are presets and no current selection, select the first one
+                if preset_names and not self.preset_dropdown.get():
+                    self.preset_dropdown.set(preset_names[0])
+                    
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to refresh presets: {str(e)}")
 
     def setup_update_preset_tab(self):
         # Main container
@@ -284,92 +265,132 @@ class SynthesizerGUI:
         main_frame.pack(expand=True, fill='both', padx=40, pady=20)
 
         # Title
-        title_font = Font(family="Arial", size=24, weight="bold")
-        title = tk.Label(main_frame, text="Update Preset", 
-                        font=title_font, bg='#f0f0f0')
-        title.pack(pady=(0, 30))
+        title_label = ttk.Label(main_frame, text="Update Preset", font=('Arial', 24, 'bold'))
+        title_label.pack(pady=(0, 20))
 
-        # Preset selection frame
-        select_frame = ttk.Frame(main_frame)
-        select_frame.pack(fill='x', padx=20, pady=(0, 20))
-
-        # Preset dropdown
-        ttk.Label(select_frame, text="Select Preset:", 
-                 font=("Arial", 12)).pack(side='left', padx=(0, 10))
-        self.preset_dropdown = ttk.Combobox(select_frame, state='readonly',
-                                          font=("Arial", 12), width=30)
+        # Preset selection
+        preset_frame = ttk.Frame(main_frame)
+        preset_frame.pack(fill='x', pady=(0, 20))
+        
+        ttk.Label(preset_frame, text="Select Preset:").pack(side='left', padx=(0, 10))
+        self.preset_dropdown = ttk.Combobox(preset_frame, state='readonly', width=30)
         self.preset_dropdown.pack(side='left')
+        
+        # Bind selection event
         self.preset_dropdown.bind('<<ComboboxSelected>>', self.on_preset_selected)
 
         # Parameters frame
         params_frame = ttk.Frame(main_frame)
-        params_frame.pack(fill='x', padx=20)
+        params_frame.pack(fill='x')
 
-        # Parameter entries
-        params = [
-            ("Filter Cutoff:", "cutoff_freq"),
-            ("Resonance:", "resonance"),
-            ("Amplitude:", "amplitude"),
-            ("Resistance:", "resistance")
-        ]
-
+        # Create entry fields and update buttons for each parameter
         self.update_entries = {}
-        param_font = Font(family="Arial", size=12)
-        
-        for i, (label_text, param_name) in enumerate(params):
+        row = 0
+        for param in ["cutoff_freq", "resonance", "amplitude", "resistance"]:
             param_frame = ttk.Frame(params_frame)
-            param_frame.pack(fill='x', pady=10)
+            param_frame.grid(row=row, column=0, pady=5, sticky='ew')
             
-            # Label
-            ttk.Label(param_frame, text=label_text, 
-                     font=param_font).pack(side='left', padx=(0, 10))
+            # Parameter label
+            ttk.Label(param_frame, text=f"{param.replace('_', ' ').title()}:").pack(side='left', padx=(0, 10))
             
-            # Entry
-            entry = ttk.Entry(param_frame, font=param_font, width=15)
-            entry.pack(side='left')
-            self.update_entries[param_name] = entry
+            # Entry field
+            entry = ttk.Entry(param_frame, width=15)
+            entry.pack(side='left', padx=(0, 10))
+            self.update_entries[param] = entry
             
-            # Update button for this parameter
-            update_btn = ttk.Button(param_frame, text="Update",
-                                  command=lambda p=param_name: self.update_parameter(p))
-            update_btn.pack(side='left', padx=10)
-
-        # Initial load of presets for dropdown
+            # Update button
+            update_btn = ttk.Button(
+                param_frame, 
+                text="Update",
+                command=lambda p=param: self.update_parameter(p)
+            )
+            update_btn.pack(side='left')
+            
+            row += 1
+            
+        # Initial refresh to populate the dropdown
         self.refresh_presets()
 
     def on_preset_selected(self, event):
         preset_name = self.preset_dropdown.get()
-        request = {"operation": "list"}
-        response = self.send_request(request)
-        
-        if response and "presets" in response:
-            for preset in response["presets"]:
-                if preset["preset_name"] == preset_name:
-                    # Fill in the current values
-                    for param_name in self.update_entries:
-                        if param_name in preset:
-                            self.update_entries[param_name].delete(0, tk.END)
-                            self.update_entries[param_name].insert(0, f"{float(preset[param_name]):.2f}")
+        try:
+            preset = self.controller.get_preset(preset_name)
+            # Fill in the current values
+            for param_name in self.update_entries:
+                if param_name in preset:
+                    self.update_entries[param_name].delete(0, tk.END)
+                    self.update_entries[param_name].insert(0, f"{float(preset[param_name]):.2f}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load preset: {str(e)}")
 
     def update_parameter(self, param_name):
         preset_name = self.preset_dropdown.get()
         if not preset_name:
             return
 
-        new_value = self.update_entries[param_name].get()
         try:
-            float(new_value)  # Validate that the value is a number
+            new_value = float(self.update_entries[param_name].get())
         except ValueError:
+            messagebox.showerror("Error", "Please enter a valid number")
+            return
+
+        update_data = {}
+        if param_name == "cutoff_freq":
+            update_data["cutoff_freq"] = new_value
+        elif param_name == "resonance":
+            update_data["resonance"] = new_value
+        elif param_name == "amplitude":
+            update_data["amplitude"] = new_value
+        elif param_name == "resistance":
+            update_data["resistance"] = new_value
+
+        try:
+            result = self.controller.update_preset(preset_name, **update_data)
+            if result:
+                messagebox.showinfo("Success", f"{param_name} updated successfully!")
+                self.refresh_presets()
+            else:
+                messagebox.showerror("Error", "Failed to update preset!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to update preset: {str(e)}")
+
+    def save_preset(self):
+        name = self.preset_name_entry.get()
+        if not name:
             return
 
         request = {
-            "operation": "update",
-            "preset_name": preset_name,
-            "data": {param_name: new_value}
+            "preset_name": name,
+            "cutoff_freq": self.param_entries["cutoff_freq"].get(),
+            "resonance": self.param_entries["resonance"].get(),
+            "amplitude": self.param_entries["amplitude"].get(),
+            "resistance": self.param_entries["resistance"].get()
         }
-        response = self.send_request(request)
-        if response:
-            self.refresh_presets()
+        
+        self.send_create_request(request["preset_name"], request["cutoff_freq"], request["resonance"], request["amplitude"], request["resistance"])
+
+    def load_preset(self):
+        selection = self.presets_listbox.curselection()
+        if not selection:
+            return
+
+        preset_name = self.presets_listbox.get(selection[0])
+        try:
+            preset = self.controller.get_preset(preset_name)
+            # Update the synth display
+            self.update_synth_display(preset)
+            # Switch to the first tab
+            self.notebook.select(0)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load preset: {str(e)}")
+
+    def delete_preset(self):
+        selection = self.presets_listbox.curselection()
+        if not selection:
+            return
+
+        preset_name = self.presets_listbox.get(selection[0])
+        self.send_delete_request(preset_name)
 
 if __name__ == "__main__":
     root = tk.Tk()
