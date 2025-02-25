@@ -26,5 +26,12 @@
         "resonance": "20",
         "amplitude": "30",
         "resistance": "40"
+    },
+    {
+        "preset_name": "Preset_2",
+        "cutoff_freq": "20",
+        "resonance": "50",
+        "amplitude": "80",
+        "resistance": "100"
     }
 ]
