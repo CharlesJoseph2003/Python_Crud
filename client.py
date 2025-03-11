@@ -43,19 +43,38 @@ class SynthesizerGUI:
         self.setup_saved_presets_tab()
         self.setup_update_preset_tab()
 
+    def create_scrollable_frame(self, parent):
+        # Create a canvas and scrollbar
+        canvas = tk.Canvas(parent, bg='#f0f0f0')
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+
+        # Configure the canvas
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Pack the canvas and scrollbar
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        return scrollable_frame
+
     def setup_current_config_tab(self):
-        # Main container with padding
-        main_frame = ttk.Frame(self.current_config_tab)
-        main_frame.pack(expand=True, fill='both', padx=40, pady=20)
+        # Create scrollable frame
+        scrollable_frame = self.create_scrollable_frame(self.current_config_tab)
 
         # Title
         title_font = Font(family="Arial", size=24, weight="bold")
-        title = tk.Label(main_frame, text="Synthesizer Parameters", 
+        title = tk.Label(scrollable_frame, text="Synthesizer Parameters", 
                         font=title_font, bg='#f0f0f0')
         title.pack(pady=(0, 30))
 
         # Parameters frame
-        params_frame = ttk.Frame(main_frame)
+        params_frame = ttk.Frame(scrollable_frame)
         params_frame.pack(fill='x', padx=20)
 
         # Create parameter entries with labels
@@ -64,8 +83,11 @@ class SynthesizerGUI:
             ("Preset Name:", "preset_name"),
             ("Filter Cutoff:", "cutoff_freq"),
             ("Resonance:", "resonance"),
-            ("Amplitude:", "amplitude"),
-            ("Resistance:", "resistance")
+            ("A:", "A"),
+            ("D:", "D"),
+            ("S:", "S"),
+            ("R:", "R")
+
         ]
 
         # Configure grid column weights
@@ -88,7 +110,7 @@ class SynthesizerGUI:
                 self.param_entries[param_name] = entry
 
         # Save button container for center alignment
-        button_frame = ttk.Frame(main_frame)
+        button_frame = ttk.Frame(scrollable_frame)
         button_frame.pack(fill='x', pady=30)
         
         # Save button
@@ -97,18 +119,17 @@ class SynthesizerGUI:
         save_btn.pack(pady=10)
 
     def setup_saved_presets_tab(self):
-        # Main container
-        main_frame = ttk.Frame(self.saved_presets_tab)
-        main_frame.pack(expand=True, fill='both', padx=40, pady=20)
+        # Create scrollable frame
+        scrollable_frame = self.create_scrollable_frame(self.saved_presets_tab)
 
         # Title
         title_font = Font(family="Arial", size=24, weight="bold")
-        title = tk.Label(main_frame, text="Saved Presets", 
+        title = tk.Label(scrollable_frame, text="Saved Presets", 
                         font=title_font, bg='#f0f0f0')
         title.pack(pady=(0, 30))
 
         # Presets listbox with scrollbar
-        list_frame = ttk.Frame(main_frame)
+        list_frame = ttk.Frame(scrollable_frame)
         list_frame.pack(fill='both', expand=True, padx=20)
         
         scrollbar = ttk.Scrollbar(list_frame)
@@ -126,7 +147,7 @@ class SynthesizerGUI:
         scrollbar.config(command=self.presets_listbox.yview)
 
         # Buttons frame
-        btn_frame = ttk.Frame(main_frame)
+        btn_frame = ttk.Frame(scrollable_frame)
         btn_frame.pack(pady=20)
 
         # Buttons with consistent width
@@ -142,18 +163,17 @@ class SynthesizerGUI:
         self.refresh_presets()
 
     def setup_synth_config_tab(self):
-        # Main container
-        main_frame = ttk.Frame(self.synth_config_tab)
-        main_frame.pack(expand=True, fill='both', padx=40, pady=20)
+        # Create scrollable frame
+        scrollable_frame = self.create_scrollable_frame(self.synth_config_tab)
 
         # Title
         title_font = Font(family="Arial", size=24, weight="bold")
-        title = tk.Label(main_frame, text="Synthesizer Parameters", 
+        title = tk.Label(scrollable_frame, text="Synthesizer Parameters", 
                         font=title_font, bg='#f0f0f0')
         title.pack(pady=(0, 30))
 
         # Parameters frame
-        params_frame = ttk.Frame(main_frame)
+        params_frame = ttk.Frame(scrollable_frame)
         params_frame.pack(fill='x', padx=20)
 
         # Create labels for displaying values
@@ -164,8 +184,10 @@ class SynthesizerGUI:
             ("Preset Name:", "preset_name", ""),
             ("Filter Cutoff:", "cutoff_freq", "0.00"),
             ("Resonance:", "resonance", "0.00"),
-            ("Amplitude:", "amplitude", "0.00"),
-            ("Resistance:", "resistance", "0.00")
+            ("A:", "A", "0.00"),
+            ("D:", "D", "0.00"),
+            ("S:", "S", "0.00"),
+            ("R:", "R", "0.00")
         ]
 
         # Store labels for updating later
@@ -195,9 +217,10 @@ class SynthesizerGUI:
         mapping = {
             'cutoff_freq': 'cutoff_freq',
             'resonance': 'resonance',
-            'amplitude': 'amplitude',
-            'resistance': 'resistance',
-            'preset_name': 'preset_name'
+            'A': 'A',
+            'D': 'D',
+            'S': 'S',
+            'R': 'R'
         }
         
         for preset_param, display_param in mapping.items():
@@ -216,9 +239,9 @@ class SynthesizerGUI:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to create preset: {str(e)}")
 
-    def send_update_request(self, preset_name, cutoff_freq=None, resonance=None, amplitude=None, resistance=None):
+    def send_update_request(self, preset_name, cutoff_freq=None, resonance=None, A=None, D=None, S=None, R=None):
         try:
-            result = self.controller.update_preset(preset_name, cutoff_freq, resonance, amplitude, resistance)
+            result = self.controller.update_preset(preset_name, cutoff_freq, resonance, A, D, S, R)
             if result:
                 messagebox.showinfo("Success", "Preset updated successfully!")
                 self.refresh_presets()
@@ -260,17 +283,16 @@ class SynthesizerGUI:
             messagebox.showerror("Error", f"Failed to refresh presets: {str(e)}")
 
     def setup_update_preset_tab(self):
-        # Main container
-        main_frame = ttk.Frame(self.update_preset_tab)
-        main_frame.pack(expand=True, fill='both', padx=40, pady=20)
+        # Create scrollable frame
+        scrollable_frame = self.create_scrollable_frame(self.update_preset_tab)
 
         # Title
-        title_label = ttk.Label(main_frame, text="Update Preset", font=('Arial', 24, 'bold'))
-        title_label.pack(pady=(0, 20))
+        title_label = ttk.Label(scrollable_frame, text="Update Preset", font=('Arial', 24, 'bold'))
+        title_label.pack(pady=(20, 40))
 
         # Preset selection
-        preset_frame = ttk.Frame(main_frame)
-        preset_frame.pack(fill='x', pady=(0, 20))
+        preset_frame = ttk.Frame(scrollable_frame)
+        preset_frame.pack(fill='x', pady=(0, 20), padx=40)
         
         ttk.Label(preset_frame, text="Select Preset:").pack(side='left', padx=(0, 10))
         self.preset_dropdown = ttk.Combobox(preset_frame, state='readonly', width=30)
@@ -280,13 +302,13 @@ class SynthesizerGUI:
         self.preset_dropdown.bind('<<ComboboxSelected>>', self.on_preset_selected)
 
         # Parameters frame
-        params_frame = ttk.Frame(main_frame)
+        params_frame = ttk.Frame(scrollable_frame)
         params_frame.pack(fill='x')
 
         # Create entry fields and update buttons for each parameter
         self.update_entries = {}
         row = 0
-        for param in ["cutoff_freq", "resonance", "amplitude", "resistance"]:
+        for param in ["cutoff_freq", "resonance", "A", "D", "S", "R"]:
             param_frame = ttk.Frame(params_frame)
             param_frame.grid(row=row, column=0, pady=5, sticky='ew')
             
@@ -339,10 +361,14 @@ class SynthesizerGUI:
             update_data["cutoff_freq"] = new_value
         elif param_name == "resonance":
             update_data["resonance"] = new_value
-        elif param_name == "amplitude":
-            update_data["amplitude"] = new_value
-        elif param_name == "resistance":
-            update_data["resistance"] = new_value
+        elif param_name == "A":
+            update_data["A"] = new_value
+        elif param_name == "D":
+            update_data["D"] = new_value
+        elif param_name == "S":
+            update_data["S"] = new_value
+        elif param_name == "R":
+            update_data["R"] = new_value
 
         try:
             result = self.controller.update_preset(preset_name, **update_data)
@@ -363,11 +389,13 @@ class SynthesizerGUI:
             "preset_name": name,
             "cutoff_freq": self.param_entries["cutoff_freq"].get(),
             "resonance": self.param_entries["resonance"].get(),
-            "amplitude": self.param_entries["amplitude"].get(),
-            "resistance": self.param_entries["resistance"].get()
+            "A": self.param_entries["A"].get(),
+            "D": self.param_entries["D"].get(),
+            "S": self.param_entries["S"].get(),
+            "R": self.param_entries["R"].get()
         }
         
-        self.send_create_request(request["preset_name"], request["cutoff_freq"], request["resonance"], request["amplitude"], request["resistance"])
+        self.send_create_request(request["preset_name"], request["cutoff_freq"], request["resonance"], request["A"], request["D"], request["S"], request["R"])
 
     def load_preset(self):
         selection = self.presets_listbox.curselection()
