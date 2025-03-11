@@ -7,8 +7,8 @@ class Controller:
         self.file_path = file_path  # Path to the file for saving/loading
         self.load_from_file(self.file_path)  # Load existing data if the file exists
 
-    def create_preset(self, preset_name, cutoff_freq, resonance, amplitude, resistance):
-        data = SynthConfig(preset_name, cutoff_freq, resonance, amplitude, resistance)
+    def create_preset(self, preset_name, cutoff_freq, resonance, A, D,S,R):
+        data = SynthConfig(preset_name, cutoff_freq, resonance, A, D,S,R)
         self.data_storage.append(data)
         self.save_to_file(self.file_path)  # Save after creating
         return data
@@ -19,7 +19,7 @@ class Controller:
                 return data
         return None
 
-    def update_preset(self, preset_name, cutoff_freq=None, resonance=None, amplitude=None, resistance=None):
+    def update_preset(self, preset_name, cutoff_freq=None, resonance=None, A=None, D=None, S=None, R=None):
         """Update a preset with new parameter values."""
         for data in self.data_storage:
             if data.preset_name == preset_name:
@@ -27,10 +27,14 @@ class Controller:
                     data.cutoff_freq = float(cutoff_freq)
                 if resonance is not None:
                     data.resonance = float(resonance)
-                if amplitude is not None:
-                    data.amplitude = float(amplitude)
-                if resistance is not None:
-                    data.resistance = float(resistance)
+                if A is not None:
+                    data.A = float(A)
+                if D is not None:
+                    data.D = float(D)
+                if S is not None:
+                    data.S = float(S)
+                if R is not None:
+                    data.R = float(D)
                 self.save_to_file(self.file_path)  # Save after updating
                 return True
         return False
@@ -48,9 +52,9 @@ class Controller:
 
     def initialize_defaults(self):
         """Add premade presets to data_storage."""
-        self.create_preset("Default Bass", 100, 1.0, 0.8, 50)
-        self.create_preset("Default Lead", 200, 0.5, 0.9, 40)
-        self.create_preset("Default Pad", 150, 0.7, 0.6, 60)
+        self.create_preset("Default Bass", 100, 1.0, 0.8, 50, 20, 30)
+        self.create_preset("Default Lead", 200, 0.5, 0.9, 40, 15, 20)
+        self.create_preset("Default Pad", 150, 0.7, 0.6, 60, 30, 40)
 
     def save_to_file(self, file_path):
         """Save the data_storage to a file in JSON format."""
@@ -77,8 +81,10 @@ class Controller:
                 "preset_name": preset.preset_name,
                 "cutoff_freq": preset.cutoff_freq,
                 "resonance": preset.resonance,
-                "amplitude": preset.amplitude,
-                "resistance": preset.resistance
+                "A": preset.A,
+                "D": preset.D,
+                "S":preset.S,
+                "R":preset.R
             }
         return None
 

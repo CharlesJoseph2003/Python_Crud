@@ -1,18 +1,22 @@
 class SynthConfig:
-    def __init__(self, preset_name:str, cutoff_freq:float, resonance:float, amplitude:float, resistance:float):
+    def __init__(self, preset_name:str, cutoff_freq:float, resonance:float, A:float, D:float, S:float, R:float):
         self.preset_name = preset_name
         self.cutoff_freq = cutoff_freq
         self.resonance = resonance
-        self.amplitude = amplitude
-        self.resistance = resistance
+        self.A = A
+        self.D = D
+        self.S = S
+        self.R = R
     
     def __repr__(self):
         return (
             f"Preset Name: {self.preset_name}\n"
             f"Cutoff Frequency: {self.cutoff_freq}\n"
             f"Resonance: {self.resonance}\n"
-            f"Amplitude: {self.amplitude}\n"
-            f"Resistance: {self.resistance}"
+            f"A: {self.A}\n"
+            f"D: {self.D}"
+            f"S: {self.S}"
+            f"R: {self.R}"
         )
     
     def to_dict(self):
@@ -20,8 +24,10 @@ class SynthConfig:
         "preset_name": self.preset_name,  
         "cutoff_freq": self.cutoff_freq,
         "resonance": self.resonance,
-        "amplitude": self.amplitude,
-        "resistance": self.resistance,
+        "A": self.A,
+        "D": self.D,
+        "S": self.R,
+        "R": self.R,
     }
     
 

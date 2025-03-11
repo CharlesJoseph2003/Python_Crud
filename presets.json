@@ -3,35 +3,45 @@
         "preset_name": "Default Bass",
         "cutoff_freq": 100,
         "resonance": 1.0,
-        "amplitude": 0.8,
-        "resistance": 50
+        "A": 0.8,
+        "D": 50,
+        "S": 50,
+        "R": 50
     },
     {
         "preset_name": "Default Lead",
         "cutoff_freq": 200,
         "resonance": 0.5,
-        "amplitude": 0.9,
-        "resistance": 40
+        "A": 40,
+        "D": 20,
+        "S": 10,
+        "R": 10
     },
     {
         "preset_name": "Default Pad",
-        "cutoff_freq": "20",
-        "resonance": "6",
-        "amplitude": 0.6,
-        "resistance": 60
+        "cutoff_freq": 15.0,
+        "resonance": 6,
+        "A": 5,
+        "D": 10,
+        "S": 20,
+        "R": 20
     },
     {
         "preset_name": "Preset_1",
         "cutoff_freq": 140.0,
-        "resonance": "20",
-        "amplitude": "30",
-        "resistance": "40"
+        "resonance": 20,
+        "A": 30,
+        "D": 40,
+        "S": 10,
+        "R": 10
     },
     {
         "preset_name": "Preset_2",
-        "cutoff_freq": "20",
-        "resonance": "50",
-        "amplitude": "80",
-        "resistance": "100"
+        "cutoff_freq": 20,
+        "resonance": 50,
+        "A": 80,
+        "D": 100,
+        "S": 30,
+        "R": 30
     }
 ]
