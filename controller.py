@@ -38,7 +38,7 @@ class Controller:
                 if waveform is not None:
                     data.waveform = waveform
                 self.save_to_file(self.file_path)  # Save after updating
-            return True
+                return True
         return False
 
     def delete_preset(self, preset_name):

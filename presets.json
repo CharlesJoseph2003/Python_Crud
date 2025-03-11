@@ -11,23 +11,23 @@
     },
     {
         "preset_name": "Default Lead",
-        "cutoff_freq": 200,
+        "cutoff_freq": 100.0,
         "resonance": 0.5,
-        "A": 40,
-        "D": 20,
-        "S": 10,
-        "R": 10,
+        "A": 40.0,
+        "D": 20.0,
+        "S": 10.0,
+        "R": 67.85714285714286,
         "waveform": "square"
     },
     {
         "preset_name": "Default Pad",
         "cutoff_freq": 15.0,
-        "resonance": 6,
-        "A": 5,
-        "D": 10,
-        "S": 20,
-        "R": 20,
-        "waveform": "square"
+        "resonance": 6.0,
+        "A": 5.0,
+        "D": 10.0,
+        "S": 20.0,
+        "R": 55.35714285714286,
+        "waveform": "saw"
     },
     {
         "preset_name": "Preset_1",
@@ -48,5 +48,15 @@
         "S": 30,
         "R": 30,
         "waveform": "square"
+    },
+    {
+        "preset_name": "Hello",
+        "cutoff_freq": 44.642857142857146,
+        "resonance": 63.095238095238095,
+        "A": 45.83333333333333,
+        "D": 40.0,
+        "S": 35.11904761904761,
+        "R": 58.333333333333336,
+        "waveform": "triangle"
     }
 ]
