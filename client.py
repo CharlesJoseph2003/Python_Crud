@@ -14,18 +14,52 @@ class SynthesizerGUI:
         self.controller = Controller()
         self.json_serializer = JsonSerializer()
         
-        # To track the popup keyboard and target entry
-        self.keyboard_popup = None
-        self.current_target = None
-        self.keyboard_display_var = None
-        self.ignore_keyboard = False
-        
-        self.style = ttk.Style()
+        # Initialize style
+        self.style = ttk.Style(self.root)
         self.style.theme_use('default')
+        
+        # -- OPTIONAL STYLE TWEAKS FOR NOTEBOOK, FRAMES, BUTTONS --
         self.style.configure('TNotebook', background='#f0f0f0')
         self.style.configure('TFrame', background='#f0f0f0')
         self.style.configure('TButton', padding=6)
         self.style.configure('Custom.TButton', padding=10)
+        
+        # -- CUSTOM SEGMENTED STYLE FOR WAVESHAPE (DISABLED) --
+        self.style.configure(
+            "Segmented.TFrame",
+            background="#FFFFFF",
+            borderwidth=1,
+            relief="solid"
+        )
+        self.style.configure(
+            "Segmented.TRadiobutton",
+            indicatoron=0,    # Hide the typical round radio indicator
+            padding=(10, 5),  # Some internal padding
+            background="#FFFFFF",
+            relief="flat"
+        )
+        # For the disabled state, we map the background to keep it white
+        # so that the buttons don't appear "greyed out".
+        self.style.map(
+            "Segmented.TRadiobutton",
+            background=[
+                ("disabled", "#FFFFFF"),   # Keep background white even when disabled
+                ("active", "#E0E0E0"),     # Hover
+                ("selected", "#FFFFFF")    # Selected background
+            ],
+            foreground=[
+                ("disabled", "gray"),      # Optional: grey text if desired
+                ("selected", "black")
+            ],
+            relief=[
+                ("disabled", "flat"),
+                ("pressed", "sunken"),
+                ("active", "groove")
+            ]
+        )
+        
+        # Waveshape variable for display only; default is "Square"
+        self.waveshape_var = tk.StringVar(value="Square")
         
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(expand=True, fill='both')
@@ -40,46 +74,83 @@ class SynthesizerGUI:
         self.setup_saved_presets_tab()
     
     def setup_synth_config_tab(self):
-        # Use smaller padding to fit within the 800x480 screen
         main_frame = ttk.Frame(self.synth_config_tab)
         main_frame.pack(expand=True, fill='both', padx=10, pady=10)
         
-        # Use a slightly smaller title font
+        # Title label
         title_font = Font(family="Arial", size=20, weight="bold")
         title = tk.Label(main_frame, text="Synthesizer Parameters", font=title_font, bg='#f0f0f0')
         title.pack(pady=(0, 10))
         
-        # Create a compact frame for parameter entries
-        params_frame = ttk.Frame(main_frame)
-        params_frame.pack(fill='x', padx=10, pady=5)
+        # Preset Name Row (editable with virtual keyboard)
+        preset_frame = ttk.Frame(main_frame)
+        preset_frame.pack(fill='x', padx=10, pady=5)
+        preset_label = tk.Label(preset_frame, text="Preset Name:", font=("Arial", 10), bg='#f0f0f0')
+        preset_label.pack(side='left', padx=(0,5))
         
-        param_font = Font(family="Arial", size=10)
+        self.preset_name_entry = ttk.Entry(preset_frame, font=("Arial", 10))
+        self.preset_name_entry.pack(side='left', fill='x', expand=True)
+        self.preset_name_entry.bind("<Button-1>", lambda event, e=self.preset_name_entry: self.create_virtual_keyboard(e))
+        
+        # Parameters Frame with vertical scales arranged horizontally
+        params_frame = ttk.Frame(main_frame)
+        params_frame.pack(fill='both', padx=10, pady=10)
+        
+        # Updated list of parameters: (Display Name, key)
         params = [
-            ("Preset Name:", "preset_name"),
-            ("Filter Cutoff:", "cutoff_freq"),
-            ("Resonance:", "resonance"),
-            ("Amplitude:", "amplitude"),
-            ("Resistance:", "resistance")
+            ("Cutoff", "cutoff"),
+            ("Resonance", "resonance"),
+            ("A", "a"),
+            ("D", "d"),
+            ("S", "s"),
+            ("R", "r")
         ]
         
-        params_frame.grid_columnconfigure(1, weight=1)
-        self.param_entries = {}
-        for i, (label_text, param_name) in enumerate(params):
-            label = tk.Label(params_frame, text=label_text, font=param_font,
-                             bg='#f0f0f0', anchor='e')
-            label.grid(row=i, column=0, padx=(0, 5), pady=3, sticky='e')
+        self.param_widgets = {}
+        for display_name, key in params:
+            sub_frame = ttk.Frame(params_frame)
+            sub_frame.pack(side='left', padx=10, fill='y', expand=True)
             
-            entry = ttk.Entry(params_frame, font=param_font)
-            entry.grid(row=i, column=1, sticky='ew', pady=3)
-            # Bind a mouse click to open the virtual keyboard
-            entry.bind("<Button-1>", lambda event, e=entry: self.create_virtual_keyboard(e))
-            if param_name == "preset_name":
-                self.preset_name_entry = entry
-            else:
-                self.param_entries[param_name] = entry
-                entry.insert(0, "0.00")
+            # Label above the scale
+            label = tk.Label(sub_frame, text=display_name, font=("Arial", 10), bg='#f0f0f0')
+            label.pack(side='top', pady=(0,5))
+            
+            # Vertical scale (disabled so the user cannot interact)
+            scale = tk.Scale(sub_frame, from_=0, to=100, orient=tk.VERTICAL, state='disabled',
+                             showvalue=True, length=200)
+            scale.pack(side='top')
+            
+            self.param_widgets[key] = {"scale": scale, "label": label}
         
-        # Place the two action buttons in a compact horizontal frame
+        # WAVESHAPE: segmented control style (DISABLED)
+        waveshape_container = ttk.Frame(main_frame)
+        waveshape_container.pack(fill='x', padx=10, pady=(0, 10))
+        
+        # Optional label to identify the parameter
+        waveshape_label = tk.Label(
+            waveshape_container, text="Waveshape:", font=("Arial", 10), bg='#f0f0f0'
+        )
+        waveshape_label.pack(side='left', padx=(0,5))
+        
+        # Frame that holds the segmented radio buttons
+        segmented_frame = ttk.Frame(waveshape_container, style="Segmented.TFrame")
+        segmented_frame.pack(side='left', fill='x', expand=True)
+        
+        # Create the four segmented radio buttons, all disabled
+        options = ["Square", "Triangle", "Sine", "Saw"]
+        for idx, option in enumerate(options):
+            rb = ttk.Radiobutton(
+                segmented_frame,
+                text=option,
+                value=option,
+                variable=self.waveshape_var,
+                style="Segmented.TRadiobutton",
+                state="disabled"  # Make the button non-interactive
+            )
+            rb.grid(row=0, column=idx, sticky="nsew")
+            segmented_frame.columnconfigure(idx, weight=1)
+        
+        # Action buttons frame (Create / Update Preset)
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill='x', pady=5)
         
@@ -122,12 +193,11 @@ class SynthesizerGUI:
         self.refresh_presets()
     
     def create_virtual_keyboard(self, target_entry):
-        if self.ignore_keyboard:
+        if getattr(self, 'ignore_keyboard', False):
             return
         if self.keyboard_popup is not None:
             self.keyboard_popup.destroy()
         self.current_target = target_entry
-        # Set a fixed custom size for the keyboard popup (800x250)
         self.keyboard_popup = tk.Toplevel(self.root)
         self.keyboard_popup.title("Virtual Keyboard")
         self.keyboard_popup.geometry("800x250")
@@ -189,61 +259,89 @@ class SynthesizerGUI:
         preset_name = self.presets_listbox.get(selection[0])
         try:
             preset = self.controller.get_preset(preset_name)
+            
+            # Update preset name
             self.preset_name_entry.delete(0, tk.END)
             self.preset_name_entry.insert(0, preset.get("preset_name", ""))
-            for key in self.param_entries:
-                self.param_entries[key].delete(0, tk.END)
+            
+            # Update each scale
+            for key in self.param_widgets:
                 value = preset.get(key, "0.00")
                 try:
-                    self.param_entries[key].insert(0, f"{float(value):.2f}")
+                    float_val = float(value)
                 except:
-                    self.param_entries[key].insert(0, value)
+                    float_val = 0.0
+                self.param_widgets[key]['scale'].config(state='normal')
+                self.param_widgets[key]['scale'].set(float_val)
+                self.param_widgets[key]['scale'].config(state='disabled')
+            
+            # Update the waveshape display (defaults to "Square" if not present)
+            self.waveshape_var.set(preset.get("waveshape", "Square"))
+            
             self.notebook.focus_set()
             self.notebook.select(0)
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load preset: {str(e)}")
     
     def create_preset_from_entries(self):
+        """
+        The user can set name and numeric parameters, but waveshape is read-only.
+        We do NOT send waveshape to the controller because the user can't set it.
+        """
         name = self.preset_name_entry.get()
         if not name:
             messagebox.showerror("Error", "Preset name is required!")
             return
         try:
-            cutoff = float(self.param_entries["cutoff_freq"].get())
-            resonance = float(self.param_entries["resonance"].get())
-            amplitude = float(self.param_entries["amplitude"].get())
-            resistance = float(self.param_entries["resistance"].get())
-        except ValueError:
-            messagebox.showerror("Error", "Please enter valid numbers for parameters!")
+            cutoff = self.param_widgets["cutoff"]['scale'].get()
+            resonance = self.param_widgets["resonance"]['scale'].get()
+            a = self.param_widgets["a"]['scale'].get()
+            d = self.param_widgets["d"]['scale'].get()
+            s = self.param_widgets["s"]['scale'].get()
+            r = self.param_widgets["r"]['scale'].get()
+        except Exception:
+            messagebox.showerror("Error", "Error retrieving parameter values!")
             return
-        self.send_create_request(name, cutoff, resonance, amplitude, resistance)
+        
+        # The user can't choose waveshape here, so we won't pass it.
+        self.send_create_request(name, cutoff, resonance, a, d, s, r)
     
     def update_preset_from_entries(self):
+        """
+        The user can update name and numeric parameters, but waveshape is read-only.
+        We do NOT send waveshape to the controller because the user can't set it.
+        """
         name = self.preset_name_entry.get()
         if not name:
             messagebox.showerror("Error", "Preset name is required for update!")
             return
         try:
-            cutoff = float(self.param_entries["cutoff_freq"].get())
-            resonance = float(self.param_entries["resonance"].get())
-            amplitude = float(self.param_entries["amplitude"].get())
-            resistance = float(self.param_entries["resistance"].get())
-        except ValueError:
-            messagebox.showerror("Error", "Please enter valid numbers for parameters!")
+            cutoff = self.param_widgets["cutoff"]['scale'].get()
+            resonance = self.param_widgets["resonance"]['scale'].get()
+            a = self.param_widgets["a"]['scale'].get()
+            d = self.param_widgets["d"]['scale'].get()
+            s = self.param_widgets["s"]['scale'].get()
+            r = self.param_widgets["r"]['scale'].get()
+        except Exception:
+            messagebox.showerror("Error", "Error retrieving parameter values!")
             return
-        self.send_update_request(name, cutoff, resonance, amplitude, resistance)
+        
+        self.send_update_request(name, cutoff, resonance, a, d, s, r)
     
-    def send_create_request(self, preset_name, cutoff_freq, resonance, amplitude, resistance):
+    def send_create_request(self, preset_name, cutoff, resonance, a, d, s, r):
         try:
-            self.controller.create_preset(preset_name, cutoff_freq, resonance, amplitude, resistance)
+            # Not passing waveshape, as it's read-only from the user's perspective
+            self.controller.create_preset(preset_name, cutoff, resonance, a, d, s, r)
             messagebox.showinfo("Success", "Preset created successfully!")
             self.refresh_presets()
         except Exception as e:
             messagebox.showerror("Error", f"Failed to create preset: {str(e)}")
     
-    def send_update_request(self, preset_name, cutoff_freq=None, resonance=None, amplitude=None, resistance=None):
+    def send_update_request(self, preset_name, cutoff=None, resonance=None,
+                            a=None, d=None, s=None, r=None):
         try:
-            result = self.controller.update_preset(preset_name, cutoff_freq, resonance, amplitude, resistance)
+            # Not passing waveshape, as it's read-only from the user's perspective
+            result = self.controller.update_preset(preset_name, cutoff, resonance, a, d, s, r)
             if result:
                 messagebox.showinfo("Success", "Preset updated successfully!")
                 self.refresh_presets()
