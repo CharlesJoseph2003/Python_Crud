@@ -1,12 +1,13 @@
 [
     {
         "preset_name": "Default Bass",
-        "cutoff_freq": 100,
-        "resonance": 1.0,
-        "A": 0.8,
-        "D": 50,
-        "S": 50,
-        "R": 50
+        "cutoff_freq": 0.0,
+        "resonance": 0.0,
+        "A": 0.0,
+        "D": 0.0,
+        "S": 0.0,
+        "R": 33.33333333333333,
+        "waveform": "square"
     },
     {
         "preset_name": "Default Lead",
@@ -15,7 +16,8 @@
         "A": 40,
         "D": 20,
         "S": 10,
-        "R": 10
+        "R": 10,
+        "waveform": "square"
     },
     {
         "preset_name": "Default Pad",
@@ -24,7 +26,8 @@
         "A": 5,
         "D": 10,
         "S": 20,
-        "R": 20
+        "R": 20,
+        "waveform": "square"
     },
     {
         "preset_name": "Preset_1",
@@ -33,7 +36,8 @@
         "A": 30,
         "D": 40,
         "S": 10,
-        "R": 10
+        "R": 10,
+        "waveform": "square"
     },
     {
         "preset_name": "Preset_2",
@@ -42,6 +46,7 @@
         "A": 80,
         "D": 100,
         "S": 30,
-        "R": 30
+        "R": 30,
+        "waveform": "square"
     }
 ]

@@ -32,16 +32,19 @@ class SynthesizerGUI:
         self.current_config_tab = ttk.Frame(self.notebook)
         self.saved_presets_tab = ttk.Frame(self.notebook)
         self.update_preset_tab = ttk.Frame(self.notebook)
+        self.slider_config_tab = ttk.Frame(self.notebook)
         
         self.notebook.add(self.synth_config_tab, text='Current Synth Configuration')
         self.notebook.add(self.current_config_tab, text='Create Preset')
         self.notebook.add(self.saved_presets_tab, text='Saved Presets')
         self.notebook.add(self.update_preset_tab, text='Update Preset')
+        self.notebook.add(self.slider_config_tab, text='Synthesizer Configuration')
         
         self.setup_synth_config_tab()
         self.setup_current_config_tab()
         self.setup_saved_presets_tab()
         self.setup_update_preset_tab()
+        self.setup_slider_config_tab()
 
     def create_scrollable_frame(self, parent):
         # Create a canvas and scrollbar
@@ -213,8 +216,8 @@ class SynthesizerGUI:
 
     def update_synth_display(self, preset_data):
         """Update the placeholder tab with the loaded preset values"""
-        # Update all parameters
         mapping = {
+            'preset_name': 'preset_name',
             'cutoff_freq': 'cutoff_freq',
             'resonance': 'resonance',
             'A': 'A',
@@ -230,6 +233,10 @@ class SynthesizerGUI:
                     self.param_labels[display_param].config(text=str(value))
                 else:
                     self.param_labels[display_param].config(text=f"{float(value):.2f}")
+        
+        # Update waveform if present
+        if 'waveform' in preset_data:
+            self.waveform.set(preset_data['waveform'])
 
     def send_create_request(self, preset_name, cutoff_freq, resonance, amplitude, resistance):
         try:
@@ -380,6 +387,59 @@ class SynthesizerGUI:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to update preset: {str(e)}")
 
+    def update_parameter_from_slider(self):
+        preset_name = self.preset_dropdown.get() if hasattr(self, 'preset_dropdown') else None
+        if not preset_name:
+            messagebox.showerror("Error", "Please select a preset first")
+            return
+
+        # Get all slider values and waveform
+        update_data = {
+            "cutoff_freq": float(self.sliders["cutoff_freq"].get()),
+            "resonance": float(self.sliders["resonance"].get()),
+            "A": float(self.sliders["A"].get()),
+            "D": float(self.sliders["D"].get()),
+            "S": float(self.sliders["S"].get()),
+            "R": float(self.sliders["R"].get()),
+            "waveform": self.waveform.get()
+        }
+
+        try:
+            result = self.controller.update_preset(preset_name, **update_data)
+            if result:
+                messagebox.showinfo("Success", "Parameters updated successfully!")
+                self.refresh_presets()
+            else:
+                messagebox.showerror("Error", "Failed to update preset!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to update preset: {str(e)}")
+
+    def save_preset_from_slider(self):
+        name = self.preset_name_entry.get()
+        if not name:
+            messagebox.showerror("Error", "Please enter a preset name")
+            return
+
+        # Get all slider values and waveform
+        params = {
+            "preset_name": name,
+            "cutoff_freq": float(self.sliders["cutoff_freq"].get()),
+            "resonance": float(self.sliders["resonance"].get()),
+            "A": float(self.sliders["A"].get()),
+            "D": float(self.sliders["D"].get()),
+            "S": float(self.sliders["S"].get()),
+            "R": float(self.sliders["R"].get()),
+            "waveform": self.waveform.get()
+        }
+        
+        try:
+            self.controller.create_preset(**params)
+            messagebox.showinfo("Success", "Preset created successfully!")
+            self.refresh_presets()
+            self.preset_name_entry.delete(0, tk.END)  # Clear the name field
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to create preset: {str(e)}")
+
     def save_preset(self):
         name = self.preset_name_entry.get()
         if not name:
@@ -419,6 +479,110 @@ class SynthesizerGUI:
 
         preset_name = self.presets_listbox.get(selection[0])
         self.send_delete_request(preset_name)
+
+    def setup_slider_config_tab(self):
+        # Create scrollable frame
+        scrollable_frame = self.create_scrollable_frame(self.slider_config_tab)
+
+        # Title
+        title_label = ttk.Label(scrollable_frame, text="Synthesizer Parameters", font=('Arial', 24, 'bold'))
+        title_label.pack(pady=(20, 40))
+
+        # Preset Name Entry
+        preset_frame = ttk.Frame(scrollable_frame)
+        preset_frame.pack(fill='x', padx=40, pady=(0, 20))
+        ttk.Label(preset_frame, text="Preset Name:").pack(side='left')
+        self.preset_name_entry = ttk.Entry(preset_frame)
+        self.preset_name_entry.pack(side='left', fill='x', expand=True, padx=(10, 0))
+
+        # Parameters frame with horizontal layout
+        params_frame = ttk.Frame(scrollable_frame)
+        params_frame.pack(fill='x', padx=40)
+        
+        # Create sliders
+        self.sliders = {}
+        params = [
+            ("Cutoff", "cutoff_freq"),
+            ("Resonance", "resonance"),
+            ("A", "A"),
+            ("D", "D"),
+            ("S", "S"),
+            ("R", "R")
+        ]
+        
+        # Organize sliders in a single row
+        for label, param in params:
+            # Frame for each parameter
+            param_frame = ttk.Frame(params_frame)
+            param_frame.pack(side='left', expand=True, padx=5)
+            
+            # Label
+            ttk.Label(param_frame, text=label).pack(anchor='n')
+            
+            # Value label
+            value_label = ttk.Label(param_frame, text="0")
+            value_label.pack(side='top')
+            
+            # Slider
+            slider = ttk.Scale(
+                param_frame,
+                from_=0,
+                to=100,
+                orient='vertical',
+                length=200,
+                command=lambda v, label=value_label: label.configure(text=f"{float(v):.1f}")
+            )
+            slider.pack(expand=True)
+            self.sliders[param] = slider
+
+        # Waveform selection
+        wave_frame = ttk.Frame(scrollable_frame)
+        wave_frame.pack(fill='x', padx=40, pady=20)
+        
+        ttk.Label(wave_frame, text="Waveshape:").pack(anchor='w')
+        
+        # Waveform variable
+        self.waveform = tk.StringVar(value="square")
+        
+        # Waveform options
+        waveforms = [
+            ("Square", "square", "◆"),
+            ("Triangle", "triangle", "△"),
+            ("Sine", "sine", "∿"),
+            ("Saw", "saw", "⋀")
+        ]
+        
+        # Create radio buttons with symbols
+        wave_buttons_frame = ttk.Frame(wave_frame)
+        wave_buttons_frame.pack(fill='x', pady=5)
+        
+        for text, value, symbol in waveforms:
+            btn = ttk.Radiobutton(
+                wave_buttons_frame,
+                text=f"{symbol} {text}",
+                value=value,
+                variable=self.waveform
+            )
+            btn.pack(side='left', padx=10)
+
+        # Buttons frame
+        button_frame = ttk.Frame(scrollable_frame)
+        button_frame.pack(fill='x', padx=40, pady=20)
+        
+        # Create and Update buttons
+        create_btn = ttk.Button(
+            button_frame,
+            text="Create Preset",
+            command=self.save_preset_from_slider
+        )
+        create_btn.pack(side='left', expand=True, padx=5)
+        
+        update_btn = ttk.Button(
+            button_frame,
+            text="Update Preset",
+            command=self.update_parameter_from_slider
+        )
+        update_btn.pack(side='right', expand=True, padx=5)
 
 if __name__ == "__main__":
     root = tk.Tk()
