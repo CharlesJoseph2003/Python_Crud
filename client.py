@@ -3,427 +3,446 @@ from tkinter import ttk, messagebox
 from tkinter.font import Font
 from controller import Controller
 from jsonSerializer import JsonSerializer
+import requests
+import threading
+import time
 
 class SynthesizerGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Synthesizer")
-        self.root.geometry("800x600")
+        self.root.geometry("800x480")
+        self.root.configure(bg='#f0f0f0')
         
-        # Initialize controller and serializer
         self.controller = Controller()
         self.json_serializer = JsonSerializer()
+        self.server_url = "http://localhost:5000"
+        self.keyboard_popup = None
+        self.current_target = None
         
-        # Initialize default presets if none exist
-        if not self.controller.get_data_storage():
-            self.controller.initialize_defaults()
-
-        # Configure style
-        self.style = ttk.Style()
+        # Initialize style
+        self.style = ttk.Style(self.root)
         self.style.theme_use('default')
+        
+        # -- OPTIONAL STYLE TWEAKS FOR NOTEBOOK, FRAMES, BUTTONS --
         self.style.configure('TNotebook', background='#f0f0f0')
         self.style.configure('TFrame', background='#f0f0f0')
         self.style.configure('TButton', padding=6)
         self.style.configure('Custom.TButton', padding=10)
         
-        # Create notebook for tabs
-        self.notebook = ttk.Notebook(root)
-        self.notebook.pack(expand=True, fill='both', padx=10, pady=5)
-        
-        # Create tabs
-        self.current_config_tab = ttk.Frame(self.notebook)
-        self.saved_presets_tab = ttk.Frame(self.notebook)
-        self.slider_config_tab = ttk.Frame(self.notebook)
-        
-        # Add tabs to notebook
-        self.notebook.add(self.current_config_tab, text="Current Synth Configuration")
-        self.notebook.add(self.saved_presets_tab, text="Saved Presets")
-        self.notebook.add(self.slider_config_tab, text="Synthesizer Configuration")
-        
-        # Setup each tab
-        self.setup_current_config_tab()
-        self.setup_saved_presets_tab()
-        self.setup_slider_config_tab()
-
-    def create_scrollable_frame(self, parent):
-        # Create a canvas and scrollbar
-        canvas = tk.Canvas(parent, bg='#f0f0f0')
-        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
-
-        # Configure the canvas
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        # -- CUSTOM SEGMENTED STYLE FOR WAVESHAPE (DISABLED) --
+        self.style.configure(
+            "Segmented.TFrame",
+            background="#FFFFFF",
+            borderwidth=1,
+            relief="solid"
         )
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        # Pack the canvas and scrollbar
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        return scrollable_frame
-
+        self.style.configure(
+            "Segmented.TRadiobutton",
+            indicatoron=0,    # Hide the typical round radio indicator
+            padding=(10, 5),  # Some internal padding
+            background="#FFFFFF",
+            relief="flat"
+        )
+        # For the disabled state, we map the background to keep it white
+        # so that the buttons don't appear "greyed out".
+        self.style.map(
+            "Segmented.TRadiobutton",
+            background=[
+                ("disabled", "#FFFFFF"),   # Keep background white even when disabled
+                ("active", "#E0E0E0"),     # Hover
+                ("selected", "#FFFFFF")    # Selected background
+            ],
+            foreground=[
+                ("disabled", "gray"),      # Optional: grey text if desired
+                ("selected", "black")
+            ],
+            relief=[
+                ("disabled", "flat"),
+                ("pressed", "sunken"),
+                ("active", "groove")
+            ]
+        )
+        
+        # Waveshape variable for display only; default is "Square"
+        self.waveshape_var = tk.StringVar(value="Square")
+        
+        self.notebook = ttk.Notebook(root)
+        self.notebook.pack(expand=True, fill='both')
+        
+        self.synth_config_tab = ttk.Frame(self.notebook)
+        self.saved_presets_tab = ttk.Frame(self.notebook)
+        
+        self.notebook.add(self.synth_config_tab, text='Synthesizer Configuration')
+        self.notebook.add(self.saved_presets_tab, text='Saved Presets')
+        
+        self.setup_synth_config_tab()
+        self.setup_saved_presets_tab()
+        
+        # Start server polling thread
+        self.polling_active = True
+        self.polling_thread = threading.Thread(target=self.poll_server, daemon=True)
+        self.polling_thread.start()
+    
+    def setup_synth_config_tab(self):
+        main_frame = ttk.Frame(self.synth_config_tab)
+        main_frame.pack(expand=True, fill='both', padx=10, pady=10)
+        
+        # Title label
+        title_font = Font(family="Arial", size=20, weight="bold")
+        title = tk.Label(main_frame, text="Synthesizer Parameters", font=title_font, bg='#f0f0f0')
+        title.pack(pady=(0, 10))
+        
+        # Preset Name Row (editable with virtual keyboard)
+        preset_frame = ttk.Frame(main_frame)
+        preset_frame.pack(fill='x', padx=10, pady=5)
+        preset_label = tk.Label(preset_frame, text="Preset Name:", font=("Arial", 10), bg='#f0f0f0')
+        preset_label.pack(side='left', padx=(0,5))
+        
+        self.preset_name_entry = ttk.Entry(preset_frame, font=("Arial", 10))
+        self.preset_name_entry.pack(side='left', fill='x', expand=True)
+        self.preset_name_entry.bind("<Button-1>", lambda event, e=self.preset_name_entry: self.create_virtual_keyboard(e))
+        
+        # Parameters Frame with vertical scales arranged horizontally
+        params_frame = ttk.Frame(main_frame)
+        params_frame.pack(fill='both', padx=10, pady=10)
+        
+        # Updated list of parameters: (Display Name, key)
+        params = [
+            ("Cutoff", "cutoff"),
+            ("Resonance", "resonance"),
+            ("A", "a"),
+            ("D", "d"),
+            ("S", "s"),
+            ("R", "r")
+        ]
+        
+        self.param_widgets = {}
+        for display_name, key in params:
+            sub_frame = ttk.Frame(params_frame)
+            sub_frame.pack(side='left', padx=10, fill='y', expand=True)
+            
+            # Label above the scale
+            label = tk.Label(sub_frame, text=display_name, font=("Arial", 10), bg='#f0f0f0')
+            label.pack(side='top', pady=(0,5))
+            
+            # Vertical scale (disabled so the user cannot interact)
+            scale = tk.Scale(sub_frame, from_=0, to=100, orient=tk.VERTICAL, state='disabled',
+                             showvalue=True, length=200)
+            scale.pack(side='top')
+            
+            self.param_widgets[key] = {"scale": scale, "label": label}
+        
+        # WAVESHAPE: segmented control style (DISABLED)
+        waveshape_container = ttk.Frame(main_frame)
+        waveshape_container.pack(fill='x', padx=10, pady=(0, 10))
+        
+        # Optional label to identify the parameter
+        waveshape_label = tk.Label(
+            waveshape_container, text="Waveshape:", font=("Arial", 10), bg='#f0f0f0'
+        )
+        waveshape_label.pack(side='left', padx=(0,5))
+        
+        # Frame that holds the segmented radio buttons
+        segmented_frame = ttk.Frame(waveshape_container, style="Segmented.TFrame")
+        segmented_frame.pack(side='left', fill='x', expand=True)
+        
+        # Create the four segmented radio buttons, all disabled
+        options = ["Square", "Triangle", "Sine", "Saw"]
+        for idx, option in enumerate(options):
+            rb = ttk.Radiobutton(
+                segmented_frame,
+                text=option,
+                value=option,
+                variable=self.waveshape_var,
+                style="Segmented.TRadiobutton",
+                state="normal"  # Changed to normal to allow updates
+            )
+            rb.grid(row=0, column=idx, sticky="nsew")
+            segmented_frame.columnconfigure(idx, weight=1)
+        
+        # Action buttons frame (Create / Update Preset)
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill='x', pady=5)
+        
+        create_btn = ttk.Button(button_frame, text="Create Preset", 
+                                command=self.create_preset_from_entries, style='Custom.TButton')
+        create_btn.pack(side='left', padx=5, expand=True, fill='x')
+        
+        update_btn = ttk.Button(button_frame, text="Update Preset", 
+                                command=self.update_preset_from_entries, style='Custom.TButton')
+        update_btn.pack(side='left', padx=5, expand=True, fill='x')
+    
     def setup_saved_presets_tab(self):
-        # Create scrollable frame
-        scrollable_frame = self.create_scrollable_frame(self.saved_presets_tab)
-
-        # Title
-        title_font = Font(family="Arial", size=24, weight="bold")
-        title = tk.Label(scrollable_frame, text="Saved Presets", 
-                        font=title_font, bg='#f0f0f0')
-        title.pack(pady=(0, 30))
-
-        # Presets listbox with scrollbar
-        list_frame = ttk.Frame(scrollable_frame)
-        list_frame.pack(fill='both', expand=True, padx=20)
+        main_frame = ttk.Frame(self.saved_presets_tab)
+        main_frame.pack(expand=True, fill='both', padx=10, pady=10)
+        
+        title_font = Font(family="Arial", size=20, weight="bold")
+        title = tk.Label(main_frame, text="Saved Presets", font=title_font, bg='#f0f0f0')
+        title.pack(pady=(0, 10))
+        
+        list_frame = ttk.Frame(main_frame)
+        list_frame.pack(fill='both', expand=True, padx=10, pady=5)
         
         scrollbar = ttk.Scrollbar(list_frame)
         scrollbar.pack(side='right', fill='y')
         
-        self.presets_listbox = tk.Listbox(list_frame, 
-                                         font=("Arial", 11),
-                                         selectmode='single',
-                                         activestyle='none',
-                                         height=10)
+        self.presets_listbox = tk.Listbox(list_frame, font=("Arial", 10),
+                                          selectmode='single', activestyle='none', height=10)
         self.presets_listbox.pack(fill='both', expand=True)
-        
-        # Connect scrollbar
         self.presets_listbox.config(yscrollcommand=scrollbar.set)
         scrollbar.config(command=self.presets_listbox.yview)
-
-        # Buttons frame
-        btn_frame = ttk.Frame(scrollable_frame)
-        btn_frame.pack(pady=20)
-
-        # Buttons with consistent width
-        button_width = 15
-        ttk.Button(btn_frame, text="Load", command=self.load_preset,
-                  width=button_width).pack(side='left', padx=5)
-        ttk.Button(btn_frame, text="Delete", command=self.delete_preset,
-                  width=button_width).pack(side='left', padx=5)
-        ttk.Button(btn_frame, text="Refresh", command=self.refresh_presets,
-                  width=button_width).pack(side='left', padx=5)
-
-        # Initial load of presets
+        
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(pady=5)
+        
+        button_width = 10
+        ttk.Button(btn_frame, text="Load", command=self.load_preset, width=button_width).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="Delete", command=self.delete_preset, width=button_width).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="Refresh", command=self.refresh_presets, width=button_width).pack(side='left', padx=5)
+        
         self.refresh_presets()
-
-    def setup_current_config_tab(self):
-        # Create scrollable frame
-        scrollable_frame = self.create_scrollable_frame(self.current_config_tab)
-
-        # Title
-        title_font = Font(family="Arial", size=24, weight="bold")
-        title = tk.Label(scrollable_frame, text="Synthesizer Parameters", 
-                        font=title_font, bg='#f0f0f0')
-        title.pack(pady=(0, 30))
-
-        # Parameters frame
-        params_frame = ttk.Frame(scrollable_frame)
-        params_frame.pack(fill='x', padx=20)
-
-        # Create labels for displaying values
-        param_font = Font(family="Arial", size=14, slant="italic")
-        value_font = Font(family="Arial", size=14)
-        
-        params = [
-            ("Preset Name:", "preset_name", ""),
-            ("Filter Cutoff:", "cutoff_freq", "0.00"),
-            ("Resonance:", "resonance", "0.00"),
-            ("A:", "A", "0.00"),
-            ("D:", "D", "0.00"),
-            ("S:", "S", "0.00"),
-            ("R:", "R", "0.00"),
-            ("Waveform:", "waveform", "square")
-        ]
-
-        # Store labels for updating later
-        self.param_labels = {}
-        
-        # Configure grid column weights
-        params_frame.grid_columnconfigure(1, weight=1)
-        
-        for i, (label_text, param_name, default_value) in enumerate(params):
-            # Label (right-aligned)
-            label = tk.Label(params_frame, text=label_text, font=param_font,
-                           bg='#f0f0f0', anchor='e')
-            label.grid(row=i, column=0, padx=(0, 20), pady=10, sticky='e')
-            
-            # Value label (left-aligned)
-            value_label = tk.Label(params_frame, text=default_value,
-                                 font=value_font, bg='#f0f0f0', anchor='w')
-            value_label.grid(row=i, column=1, sticky='w')
-            
-            self.param_labels[param_name] = value_label
-
-    def update_synth_display(self, preset_data, from_preset=False):
-        """Update the placeholder tab with the loaded preset values."""
-        mapping = {
-            'preset_name': 'preset_name',
-            'cutoff_freq': 'cutoff_freq',
-            'resonance': 'resonance',
-            'A': 'A',
-            'D': 'D',
-            'S': 'S',
-            'R': 'R',
-            'waveform': 'waveform'
-        }
-        
-        for preset_param, display_param in mapping.items():
-            # Skip waveform update if not from a preset load
-            if not from_preset and preset_param == 'waveform':
-                continue
-                
-            if preset_param in preset_data and display_param in self.param_labels:
-                value = preset_data[preset_param]
-                if preset_param == 'preset_name' or preset_param == 'waveform':
-                    self.param_labels[display_param].config(text=str(value))
-                else:
-                    self.param_labels[display_param].config(text=f"{float(value):.2f}")
-        
-        # Only update waveform radio buttons if loading from preset
-        if from_preset and 'waveform' in preset_data:
-            self.waveform.set(preset_data['waveform'])
-
-    def update_parameter_from_slider(self):
-        preset_name = self.preset_name_var.get()
-        if not preset_name:
-            messagebox.showerror("Error", "Please select a preset first")
+    
+    def create_virtual_keyboard(self, target_entry):
+        if getattr(self, 'ignore_keyboard', False):
             return
-
-        # Get all slider values and waveform
-        update_data = {
-            "cutoff_freq": float(self.sliders["cutoff_freq"].get()),
-            "resonance": float(self.sliders["resonance"].get()),
-            "A": float(self.sliders["A"].get()),
-            "D": float(self.sliders["D"].get()),
-            "S": float(self.sliders["S"].get()),
-            "R": float(self.sliders["R"].get()),
-            "waveform": self.waveform.get()
-        }
-
-        try:
-            result = self.controller.update_preset(preset_name, **update_data)
-            if result:
-                messagebox.showinfo("Success", "Parameters updated successfully!")
-                self.refresh_presets()
-            else:
-                messagebox.showerror("Error", "Failed to update preset!")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to update preset: {str(e)}")
-
-    def save_preset_from_slider(self):
-        name = self.preset_name_var.get()
-        if not name:
+        if self.keyboard_popup is not None:
+            self.keyboard_popup.destroy()
+        self.current_target = target_entry
+        self.keyboard_popup = tk.Toplevel(self.root)
+        self.keyboard_popup.title("Virtual Keyboard")
+        self.keyboard_popup.geometry("800x250")
+        self.keyboard_display_var = tk.StringVar(value=self.current_target.get())
+        display_entry = ttk.Entry(self.keyboard_popup, textvariable=self.keyboard_display_var,
+                                  font=("Arial", 16), state="readonly", justify="center")
+        display_entry.pack(fill='x', padx=10, pady=10)
+        
+        kb_frame = ttk.Frame(self.keyboard_popup, padding=5)
+        kb_frame.pack(expand=True, fill='both')
+        
+        keys = [
+            ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+            ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
+            ["Z", "X", "C", "V", "B", "N", "M"],
+            ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            ["Space", "Backspace", "Clear", "Done"]
+        ]
+        for r, row_keys in enumerate(keys):
+            for c, key in enumerate(row_keys):
+                action = lambda char=key: self.on_keyboard_key(char)
+                btn = ttk.Button(kb_frame, text=key, command=action)
+                btn.grid(row=r, column=c, padx=2, pady=2, sticky="nsew")
+        for i in range(len(keys)):
+            kb_frame.rowconfigure(i, weight=1)
+        for i in range(max(len(row) for row in keys)):
+            kb_frame.columnconfigure(i, weight=1)
+        
+        self.keyboard_popup.protocol("WM_DELETE_WINDOW", self.close_keyboard)
+    
+    def on_keyboard_key(self, key):
+        if key == "Space":
+            self.current_target.insert(tk.END, " ")
+        elif key == "Backspace":
+            current_text = self.current_target.get()
+            if current_text:
+                self.current_target.delete(len(current_text)-1, tk.END)
+        elif key == "Clear":
+            self.current_target.delete(0, tk.END)
+        elif key == "Done":
+            self.close_keyboard()
+            return
+        else:
+            self.current_target.insert(tk.END, key)
+        self.keyboard_display_var.set(self.current_target.get())
+    
+    def close_keyboard(self):
+        if self.keyboard_popup is not None:
+            self.keyboard_popup.destroy()
+            self.keyboard_popup = None
+            self.current_target = None
+            self.ignore_keyboard = True
+            self.root.after(300, lambda: setattr(self, 'ignore_keyboard', False))
+    
+    def create_preset_from_entries(self):
+        preset_name = self.preset_name_entry.get().strip()
+        if not preset_name:
             messagebox.showerror("Error", "Please enter a preset name")
             return
-
-        # Get all slider values and waveform
-        params = {
-            "preset_name": name,
-            "cutoff_freq": float(self.sliders["cutoff_freq"].get()),
-            "resonance": float(self.sliders["resonance"].get()),
-            "A": float(self.sliders["A"].get()),
-            "D": float(self.sliders["D"].get()),
-            "S": float(self.sliders["S"].get()),
-            "R": float(self.sliders["R"].get()),
-            "waveform": self.waveform.get()
-        }
-        
+            
         try:
-            self.controller.create_preset(**params)
+            # Get values from scales
+            cutoff = float(self.param_widgets["cutoff"]["scale"].get())
+            resonance = float(self.param_widgets["resonance"]["scale"].get())
+            a = float(self.param_widgets["a"]["scale"].get())
+            d = float(self.param_widgets["d"]["scale"].get())
+            s = float(self.param_widgets["s"]["scale"].get())
+            r = float(self.param_widgets["r"]["scale"].get())
+            waveform = self.waveshape_var.get().lower()
+            
+            # Create preset using controller
+            self.controller.create_preset(preset_name, cutoff, resonance, a, d, s, r, waveform)
+            messagebox.showinfo("Success", f"Preset '{preset_name}' created successfully!")
+            self.refresh_presets()
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to create preset: {str(e)}")
+            
+    def update_preset_from_entries(self):
+        preset_name = self.preset_name_entry.get().strip()
+        if not preset_name:
+            messagebox.showerror("Error", "Please enter a preset name")
+            return
+            
+        try:
+            # Get values from scales
+            cutoff = float(self.param_widgets["cutoff"]["scale"].get())
+            resonance = float(self.param_widgets["resonance"]["scale"].get())
+            a = float(self.param_widgets["a"]["scale"].get())
+            d = float(self.param_widgets["d"]["scale"].get())
+            s = float(self.param_widgets["s"]["scale"].get())
+            r = float(self.param_widgets["r"]["scale"].get())
+            waveform = self.waveshape_var.get().lower()
+            
+            # Update preset using controller
+            success = self.controller.update_preset(
+                preset_name, cutoff, resonance, a, d, s, r, waveform
+            )
+            
+            if success:
+                messagebox.showinfo("Success", f"Preset '{preset_name}' updated successfully!")
+                self.refresh_presets()
+            else:
+                messagebox.showerror("Error", f"Preset '{preset_name}' not found")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to update preset: {str(e)}")
+            
+    def load_preset(self):
+        if not self.presets_listbox.curselection():
+            messagebox.showerror("Error", "Please select a preset to load")
+            return
+            
+        preset_name = self.presets_listbox.get(self.presets_listbox.curselection())
+        preset_data = self.controller.get_preset(preset_name)
+        
+        if preset_data:
+            # Update entry fields with preset data
+            self.preset_name_entry.delete(0, tk.END)
+            self.preset_name_entry.insert(0, preset_data["preset_name"])
+            
+            # Update scales
+            self.param_widgets["cutoff"]["scale"].set(preset_data["cutoff_freq"])
+            self.param_widgets["resonance"]["scale"].set(preset_data["resonance"])
+            self.param_widgets["a"]["scale"].set(preset_data["A"])
+            self.param_widgets["d"]["scale"].set(preset_data["D"])
+            self.param_widgets["s"]["scale"].set(preset_data["S"])
+            self.param_widgets["r"]["scale"].set(preset_data["R"])
+            
+            # Update waveshape
+            self.waveshape_var.set(preset_data["waveform"].capitalize())
+            
+            # Switch to the Synthesizer Configuration tab
+            self.notebook.select(self.synth_config_tab)
+            
+        else:
+            messagebox.showerror("Error", f"Failed to load preset '{preset_name}'")
+            
+    def delete_preset(self):
+        if not self.presets_listbox.curselection():
+            messagebox.showerror("Error", "Please select a preset to delete")
+            return
+            
+        preset_name = self.presets_listbox.get(self.presets_listbox.curselection())
+        
+        if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete preset '{preset_name}'?"):
+            deleted = self.controller.delete_preset(preset_name)
+            if deleted:
+                messagebox.showinfo("Success", f"Preset '{preset_name}' deleted successfully!")
+                self.refresh_presets()
+            else:
+                messagebox.showerror("Error", f"Failed to delete preset '{preset_name}'")
+                
+    def refresh_presets(self):
+        self.presets_listbox.delete(0, tk.END)
+        presets = self.controller.get_data_storage()
+        for preset in presets:
+            self.preset_name_entry.delete(0, tk.END)
+            self.presets_listbox.insert(tk.END, preset.preset_name)
+    
+    def send_create_request(self, preset_name, cutoff, resonance, a, d, s, r):
+        try:
+            # Not passing waveshape, as it's read-only from the user's perspective
+            self.controller.create_preset(preset_name, cutoff, resonance, a, d, s, r)
             messagebox.showinfo("Success", "Preset created successfully!")
             self.refresh_presets()
         except Exception as e:
             messagebox.showerror("Error", f"Failed to create preset: {str(e)}")
-
-    def load_preset(self):
-        selection = self.presets_listbox.curselection()
-        if not selection:
-            return
-
-        preset_name = self.presets_listbox.get(selection[0])
+    
+    def send_update_request(self, preset_name, cutoff=None, resonance=None,
+                            a=None, d=None, s=None, r=None):
         try:
-            preset = self.controller.get_preset(preset_name)
-            # Update the synth display with from_preset=True
-            self.update_synth_display(preset, from_preset=True)
-            # Switch to the first tab
-            self.notebook.select(0)
+            # Not passing waveshape, as it's read-only from the user's perspective
+            result = self.controller.update_preset(preset_name, cutoff, resonance, a, d, s, r)
+            if result:
+                messagebox.showinfo("Success", "Preset updated successfully!")
+                self.refresh_presets()
+            else:
+                messagebox.showerror("Error", "Preset not found!")
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to load preset: {str(e)}")
-
-    def delete_preset(self):
-        selection = self.presets_listbox.curselection()
-        if not selection:
-            return
-
-        preset_name = self.presets_listbox.get(selection[0])
+            messagebox.showerror("Error", f"Failed to update preset: {str(e)}")
+    
+    def send_delete_request(self, preset_name):
         try:
             result = self.controller.delete_preset(preset_name)
             if result:
                 messagebox.showinfo("Success", "Preset deleted successfully!")
                 self.refresh_presets()
             else:
-                messagebox.showerror("Error", "Failed to delete preset!")
+                messagebox.showerror("Error", "Preset not found!")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to delete preset: {str(e)}")
+    
+    def poll_server(self):
+        """Poll the server for current synth configuration"""
+        while self.polling_active:
+            try:
+                response = requests.get(f"{self.server_url}/current_config")
+                if response.status_code == 200:
+                    data = response.json()
+                    self.root.after(0, self.update_gui_from_server, data)
+            except requests.RequestException:
+                pass  # Silently handle connection errors
+            time.sleep(0.1)  # Poll every 100ms
 
-    def refresh_presets(self):
-        """Refresh the presets list and update dropdowns if they exist."""
-        try:
-            presets = self.controller.get_data_storage()
-            preset_names = [preset.preset_name for preset in presets]
-            
-            # Update listbox
-            if hasattr(self, 'presets_listbox'):
-                self.presets_listbox.delete(0, tk.END)
-                for preset in presets:
-                    self.presets_listbox.insert(tk.END, preset.preset_name)
-            
-            # Update dropdowns
-            for dropdown_attr in ['preset_dropdown', 'preset_name_dropdown']:
-                if hasattr(self, dropdown_attr):
-                    dropdown = getattr(self, dropdown_attr)
-                    dropdown['values'] = preset_names
-                    if preset_names and not dropdown.get():
-                        dropdown.set(preset_names[0])
-                    
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to refresh presets: {str(e)}")
+    def update_gui_from_server(self, data):
+        """Update GUI elements with server data"""
+        # Update scales
+        self.param_widgets["cutoff"]["scale"].config(state='normal')
+        self.param_widgets["resonance"]["scale"].config(state='normal')
+        self.param_widgets["a"]["scale"].config(state='normal')
+        self.param_widgets["d"]["scale"].config(state='normal')
+        self.param_widgets["s"]["scale"].config(state='normal')
+        self.param_widgets["r"]["scale"].config(state='normal')
 
-    def setup_slider_config_tab(self):
-        # Create scrollable frame
-        scrollable_frame = self.create_scrollable_frame(self.slider_config_tab)
+        self.param_widgets["cutoff"]["scale"].set(data["cutoff_freq"])
+        self.param_widgets["resonance"]["scale"].set(data["resonance"])
+        self.param_widgets["a"]["scale"].set(data["A"])
+        self.param_widgets["d"]["scale"].set(data["D"])
+        self.param_widgets["s"]["scale"].set(data["S"])
+        self.param_widgets["r"]["scale"].set(data["R"])
+        
+        # Update waveshape
+        self.waveshape_var.set(data["waveform"].capitalize())
 
-        # Title
-        title_label = ttk.Label(scrollable_frame, text="Synthesizer Parameters", font=('Arial', 24, 'bold'))
-        title_label.pack(pady=(20, 40))
-
-        # Preset Name Frame
-        preset_frame = ttk.Frame(scrollable_frame)
-        preset_frame.pack(fill='x', padx=40, pady=(0, 20))
-        ttk.Label(preset_frame, text="Preset Name:").pack(side='left')
-        
-        # Create Preset Dropdown
-        self.preset_name_var = tk.StringVar()
-        self.preset_name_dropdown = ttk.Combobox(preset_frame, textvariable=self.preset_name_var)  
-        self.preset_name_dropdown.pack(side='left', fill='x', expand=True, padx=(10, 0))
-        
-        # Bind selection event
-        self.preset_name_dropdown.bind('<<ComboboxSelected>>', self.on_preset_selected_slider)
-        
-        # Initialize dropdown with existing presets
-        self.refresh_presets()
-        
-        # Parameters frame with horizontal layout
-        params_frame = ttk.Frame(scrollable_frame)
-        params_frame.pack(fill='x', padx=40)
-        
-        # Create sliders
-        self.sliders = {}
-        params = [
-            ("Cutoff", "cutoff_freq"),
-            ("Resonance", "resonance"),
-            ("A", "A"),
-            ("D", "D"),
-            ("S", "S"),
-            ("R", "R")
-        ]
-        
-        # Organize sliders in a single row
-        for label, param in params:
-            # Frame for each parameter
-            param_frame = ttk.Frame(params_frame)
-            param_frame.pack(side='left', expand=True, padx=5)
-            
-            # Label
-            ttk.Label(param_frame, text=label).pack(anchor='n')
-            
-            # Value label
-            value_label = ttk.Label(param_frame, text="0")
-            value_label.pack(side='top')
-            
-            # Slider
-            slider = ttk.Scale(
-                param_frame,
-                from_=0,
-                to=100,
-                orient='vertical',
-                length=200,
-                command=lambda v, label=value_label: label.configure(text=f"{float(v):.1f}")
-            )
-            slider.pack(expand=True)
-            self.sliders[param] = slider
-
-        # Waveform selection
-        wave_frame = ttk.Frame(scrollable_frame)
-        wave_frame.pack(fill='x', padx=40, pady=20)
-        
-        ttk.Label(wave_frame, text="Waveshape:").pack(anchor='w')
-        
-        # Waveform variable
-        self.waveform = tk.StringVar(value="square")
-        
-        # Waveform options
-        waveforms = [
-            ("Square", "square", "◆"),
-            ("Triangle", "triangle", "△"),
-            ("Sine", "sine", "∿"),
-            ("Saw", "saw", "⋀")
-        ]
-        
-        # Create radio buttons with symbols
-        wave_buttons_frame = ttk.Frame(wave_frame)
-        wave_buttons_frame.pack(fill='x', pady=5)
-        
-        for text, value, symbol in waveforms:
-            btn = ttk.Radiobutton(
-                wave_buttons_frame,
-                text=f"{symbol} {text}",
-                value=value,
-                variable=self.waveform
-            )
-            btn.pack(side='left', padx=10)
-
-        # Buttons frame
-        button_frame = ttk.Frame(scrollable_frame)
-        button_frame.pack(fill='x', padx=40, pady=20)
-        
-        # Create and Update buttons
-        create_btn = ttk.Button(
-            button_frame,
-            text="Create Preset",
-            command=self.save_preset_from_slider
-        )
-        create_btn.pack(side='left', expand=True, padx=5)
-        
-        update_btn = ttk.Button(
-            button_frame,
-            text="Update Preset",
-            command=self.update_parameter_from_slider
-        )
-        update_btn.pack(side='right', expand=True, padx=5)
-
-    def on_preset_selected_slider(self, event):
-        preset_name = self.preset_name_var.get()
-        try:
-            preset = self.controller.get_preset(preset_name)
-            if preset:
-                # Update sliders
-                self.sliders["cutoff_freq"].set(float(preset["cutoff_freq"]))
-                self.sliders["resonance"].set(float(preset["resonance"]))
-                self.sliders["A"].set(float(preset["A"]))
-                self.sliders["D"].set(float(preset["D"]))
-                self.sliders["S"].set(float(preset["S"]))
-                self.sliders["R"].set(float(preset["R"]))
-                # Update waveform
-                if "waveform" in preset:
-                    self.waveform.set(preset["waveform"])
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to load preset: {str(e)}")
+    def on_closing(self):
+        """Clean up when window is closed"""
+        self.polling_active = False
+        if self.polling_thread.is_alive():
+            self.polling_thread.join(timeout=1.0)
+        self.root.destroy()
 
 if __name__ == "__main__":
     root = tk.Tk()
     app = SynthesizerGUI(root)
+    root.protocol("WM_DELETE_WINDOW", app.on_closing)  # Handle window closing
     root.mainloop()
