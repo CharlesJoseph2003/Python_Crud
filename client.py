@@ -126,9 +126,14 @@ class SynthesizerGUI:
             label = tk.Label(sub_frame, text=display_name, font=("Arial", 10), bg='#f0f0f0')
             label.pack(side='top', pady=(0,5))
             
-            # Vertical scale (disabled so the user cannot interact)
-            scale = tk.Scale(sub_frame, from_=0, to=100, orient=tk.VERTICAL, state='disabled',
-                             showvalue=True, length=200)
+            # Vertical scale that can be updated but not interacted with
+            scale = tk.Scale(sub_frame, from_=0, to=100, orient=tk.VERTICAL,
+                           showvalue=True, length=200, takefocus=0)
+            scale.bind('<Button-1>', lambda e: 'break')  # Prevent mouse interaction
+            scale.bind('<Button-2>', lambda e: 'break')
+            scale.bind('<Button-3>', lambda e: 'break')
+            scale.bind('<B1-Motion>', lambda e: 'break')
+            scale.bind('<MouseWheel>', lambda e: 'break')
             scale.pack(side='top')
             
             self.param_widgets[key] = {"scale": scale, "label": label}
@@ -417,13 +422,6 @@ class SynthesizerGUI:
     def update_gui_from_server(self, data):
         """Update GUI elements with server data"""
         # Update scales
-        self.param_widgets["cutoff"]["scale"].config(state='normal')
-        self.param_widgets["resonance"]["scale"].config(state='normal')
-        self.param_widgets["a"]["scale"].config(state='normal')
-        self.param_widgets["d"]["scale"].config(state='normal')
-        self.param_widgets["s"]["scale"].config(state='normal')
-        self.param_widgets["r"]["scale"].config(state='normal')
-
         self.param_widgets["cutoff"]["scale"].set(data["cutoff_freq"])
         self.param_widgets["resonance"]["scale"].set(data["resonance"])
         self.param_widgets["a"]["scale"].set(data["A"])
