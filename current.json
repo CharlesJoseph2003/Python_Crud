@@ -1,0 +1,10 @@
+{
+    "cutoff_freq": 145.06297,
+    "resonance": 0.74359,
+    "A": 0.57139,
+    "D": 51.65252,
+    "S": 57.08139,
+    "R": 57.69699,
+    "waveform": "sine",
+    "is_preset": false
+}

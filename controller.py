@@ -7,8 +7,8 @@ class Controller:
         self.file_path = file_path  # Path to the file for saving/loading
         self.load_from_file(self.file_path)  # Load existing data if the file exists
 
-    def create_preset(self, preset_name, cutoff_freq, resonance, A, D,S,R):
-        data = SynthConfig(preset_name, cutoff_freq, resonance, A, D,S,R)
+    def create_preset(self, preset_name, cutoff_freq, resonance, A, D, S, R, waveform="square"):
+        data = SynthConfig(preset_name, cutoff_freq, resonance, A, D, S, R, waveform)
         self.data_storage.append(data)
         self.save_to_file(self.file_path)  # Save after creating
         return data
@@ -19,7 +19,7 @@ class Controller:
                 return data
         return None
 
-    def update_preset(self, preset_name, cutoff_freq=None, resonance=None, A=None, D=None, S=None, R=None):
+    def update_preset(self, preset_name, cutoff_freq=None, resonance=None, A=None, D=None, S=None, R=None, waveform=None):
         """Update a preset with new parameter values."""
         for data in self.data_storage:
             if data.preset_name == preset_name:
@@ -34,7 +34,9 @@ class Controller:
                 if S is not None:
                     data.S = float(S)
                 if R is not None:
-                    data.R = float(D)
+                    data.R = float(R)
+                if waveform is not None:
+                    data.waveform = waveform
                 self.save_to_file(self.file_path)  # Save after updating
                 return True
         return False
@@ -52,9 +54,9 @@ class Controller:
 
     def initialize_defaults(self):
         """Add premade presets to data_storage."""
-        self.create_preset("Default Bass", 100, 1.0, 0.8, 50, 20, 30)
-        self.create_preset("Default Lead", 200, 0.5, 0.9, 40, 15, 20)
-        self.create_preset("Default Pad", 150, 0.7, 0.6, 60, 30, 40)
+        self.create_preset("Default Bass", 100, 1.0, 0.8, 50, 20, 30, "square")
+        self.create_preset("Default Lead", 200, 0.5, 0.9, 40, 15, 20, "sine")
+        self.create_preset("Default Pad", 150, 0.7, 0.6, 60, 30, 40, "triangle")
 
     def save_to_file(self, file_path):
         """Save the data_storage to a file in JSON format."""
@@ -83,8 +85,9 @@ class Controller:
                 "resonance": preset.resonance,
                 "A": preset.A,
                 "D": preset.D,
-                "S":preset.S,
-                "R":preset.R
+                "S": preset.S,
+                "R": preset.R,
+                "waveform": preset.waveform
             }
         return None
 
@@ -92,9 +95,9 @@ class Controller:
 if __name__ == "__main__":
     controller = Controller()
     controller.initialize_defaults()
-    preset = controller.create_preset("preset 1", 10, 20, 30, 40)
-    preset2 = controller.create_preset("preset 2", 50,60,70,80)
-    controller.update_preset("preset 2", cutoff_freq=20)
+    preset = controller.create_preset("preset 1", 10, 20, 30, 40, 50, 60, "sawtooth")
+    preset2 = controller.create_preset("preset 2", 50,60,70,80, 90, 100, "square")
+    controller.update_preset("preset 2", cutoff_freq=20, waveform="triangle")
     # controller.delete_preset("preset 2")
     # print(controller.get_data_storage())
     # controller.delete_preset("preset 2")

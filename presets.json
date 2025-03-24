@@ -1,30 +1,33 @@
 [
     {
         "preset_name": "Default Bass",
-        "cutoff_freq": 100,
-        "resonance": 1.0,
-        "A": 0.8,
-        "D": 50,
-        "S": 50,
-        "R": 50
+        "cutoff_freq": 0.0,
+        "resonance": 0.0,
+        "A": 0.0,
+        "D": 0.0,
+        "S": 0.0,
+        "R": 33.33333333333333,
+        "waveform": "square"
     },
     {
         "preset_name": "Default Lead",
-        "cutoff_freq": 200,
+        "cutoff_freq": 100.0,
         "resonance": 0.5,
-        "A": 40,
-        "D": 20,
-        "S": 10,
-        "R": 10
+        "A": 40.0,
+        "D": 20.0,
+        "S": 10.0,
+        "R": 67.85714285714286,
+        "waveform": "square"
     },
     {
         "preset_name": "Default Pad",
         "cutoff_freq": 15.0,
-        "resonance": 6,
-        "A": 5,
-        "D": 10,
-        "S": 20,
-        "R": 20
+        "resonance": 6.0,
+        "A": 5.0,
+        "D": 10.0,
+        "S": 20.0,
+        "R": 55.35714285714286,
+        "waveform": "saw"
     },
     {
         "preset_name": "Preset_1",
@@ -33,7 +36,8 @@
         "A": 30,
         "D": 40,
         "S": 10,
-        "R": 10
+        "R": 10,
+        "waveform": "square"
     },
     {
         "preset_name": "Preset_2",
@@ -42,6 +46,37 @@
         "A": 80,
         "D": 100,
         "S": 30,
-        "R": 30
+        "R": 30,
+        "waveform": "square"
+    },
+    {
+        "preset_name": "Hello",
+        "cutoff_freq": 45.0,
+        "resonance": 63.0,
+        "A": 46.0,
+        "D": 40.0,
+        "S": 35.0,
+        "R": 58.0,
+        "waveform": "triangle"
+    },
+    {
+        "preset_name": "Live Update",
+        "cutoff_freq": 72.0,
+        "resonance": 82.0,
+        "A": 80.0,
+        "D": 77.0,
+        "S": 93.0,
+        "R": 69.0,
+        "waveform": "sine"
+    },
+    {
+        "preset_name": "Preset_2",
+        "cutoff_freq": 20.0,
+        "resonance": 50.0,
+        "A": 80.0,
+        "D": 100.0,
+        "S": 30.0,
+        "R": 30.0,
+        "waveform": "square"
     }
 ]
