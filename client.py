@@ -346,6 +346,16 @@ class SynthesizerGUI:
             # Update waveshape
             self.waveshape_var.set(preset_data["waveform"].capitalize())
             
+            # Send the preset data to the server
+            try:
+                response = requests.post(f"{self.server_url}/load_preset", json=preset_data)
+                if response.status_code == 200:
+                    print(f"Preset '{preset_name}' sent to server successfully")
+                else:
+                    print(f"Failed to send preset to server: {response.text}")
+            except Exception as e:
+                print(f"Error sending preset to server: {str(e)}")
+            
             # Switch to the Synthesizer Configuration tab
             self.notebook.select(self.synth_config_tab)
             
