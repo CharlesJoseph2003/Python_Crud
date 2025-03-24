@@ -9,9 +9,19 @@ app = Flask(__name__)
 current_preset = None
 use_preset = False
 
-def save_current_config(config):
+def save_current_config(config, is_preset=False):
+    # Create a copy of the config to avoid modifying the original
+    config_to_save = config.copy()
+    
+    # Always remove preset_name from the configuration
+    if 'preset_name' in config_to_save:
+        del config_to_save['preset_name']
+    
+    # Add the flag indicating if this is a preset
+    config_to_save['is_preset'] = is_preset
+    
     with open('current.json', 'w') as f:
-        json.dump(config, f, indent=4)
+        json.dump(config_to_save, f, indent=4)
 
 def generate_synth_config():
     global current_preset, use_preset
@@ -20,7 +30,11 @@ def generate_synth_config():
     if use_preset and current_preset:
         # Reset the flag after using once to return to random values unless loaded again
         use_preset = False
-        config = current_preset
+        # Make a copy and remove preset_name
+        config = current_preset.copy()
+        if 'preset_name' in config:
+            del config['preset_name']
+        save_current_config(config, is_preset=True)
     else:
         # Otherwise, generate random values as before
         waveforms = ["square", "triangle", "sine", "saw"]
@@ -33,9 +47,8 @@ def generate_synth_config():
             "R": round(random.uniform(20, 60), 5),
             "waveform": random.choice(waveforms)
         }
+        save_current_config(config, is_preset=False)
     
-    # Save the current configuration to file
-    save_current_config(config)
     return config
 
 @app.route('/current_config')
@@ -52,6 +65,11 @@ def load_preset():
     if preset_data:
         current_preset = preset_data
         use_preset = True
+        # Make a copy and remove preset_name before saving
+        config = preset_data.copy()
+        if 'preset_name' in config:
+            del config['preset_name']
+        save_current_config(config, is_preset=True)
         return jsonify({"status": "success", "message": "Preset loaded"})
     else:
         return jsonify({"status": "error", "message": "Invalid preset data"}), 400
